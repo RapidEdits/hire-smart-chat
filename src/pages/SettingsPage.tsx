@@ -1,14 +1,14 @@
 
-import { Dashboard } from "@/components/Dashboard";
 import { NavBar } from "@/components/NavBar";
+import { Settings } from "@/components/Settings";
 
-const Index = () => {
+const SettingsPage = () => {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <NavBar />
-      <Dashboard />
+      <Settings />
     </div>
   );
 };
 
-export default Index;
+export default SettingsPage;

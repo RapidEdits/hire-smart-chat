@@ -1,14 +1,14 @@
 
-import { Dashboard } from "@/components/Dashboard";
+import { CandidatesList } from "@/components/CandidatesList";
 import { NavBar } from "@/components/NavBar";
 
-const Index = () => {
+const Candidates = () => {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <NavBar />
-      <Dashboard />
+      <CandidatesList />
     </div>
   );
 };
 
-export default Index;
+export default Candidates;
