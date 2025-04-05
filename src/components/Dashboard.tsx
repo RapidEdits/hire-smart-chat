@@ -3,13 +3,15 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { QRCodeConnect } from "./QRCodeConnect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { FileSpreadsheet, MessageSquare, Users } from "lucide-react";
+import { FileSpreadsheet, MessageSquare, Users, Bot } from "lucide-react";
 import { Button } from "./ui/button";
 import { useToast } from "./ui/use-toast";
+import { useNavigate } from "react-router-dom";
 
 export function Dashboard() {
   const [connected, setConnected] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   const handleConnect = () => {
     setConnected(true);
@@ -23,7 +25,7 @@ export function Dashboard() {
     <div className="container mx-auto py-6">
       <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -63,6 +65,27 @@ export function Dashboard() {
               <div className="text-2xl font-bold">0</div>
               <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
             </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-whatsapp/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              WhatsApp Bot
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-2xl font-bold">{connected ? "Active" : "Inactive"}</div>
+              <Bot className="h-4 w-4 text-whatsapp" />
+            </div>
+            <Button 
+              variant="link" 
+              className="text-whatsapp p-0 h-auto text-xs mt-2"
+              onClick={() => navigate("/whatsapp-bot")}
+            >
+              Manage Bot
+            </Button>
           </CardContent>
         </Card>
       </div>
