@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
 import { QRCodeConnect } from "./QRCodeConnect";
-import { useToast } from "./ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { Loader2, MessageCircle } from "lucide-react";
+import { whatsAppService } from "@/services/whatsappService";
 
 export function WhatsAppBot() {
   const [botStatus, setBotStatus] = useState<"idle" | "initializing" | "running" | "error">("idle");
@@ -12,26 +13,58 @@ export function WhatsAppBot() {
   const [connected, setConnected] = useState(false);
   const { toast } = useToast();
 
-  // Mock function to start the bot (in a real app, this would make an API call)
+  useEffect(() => {
+    // Check initial connection status
+    whatsAppService.getStatus().then(({ isConnected }) => {
+      if (isConnected) {
+        setConnected(true);
+        setBotStatus("running");
+        setLogs(prev => [...prev, "WhatsApp bot is already running"]);
+      }
+    });
+
+    // Set up WebSocket listeners
+    const statusUnsubscribe = whatsAppService.on('connectionStatus', (data: { isConnected: boolean }) => {
+      setConnected(data.isConnected);
+      if (data.isConnected) {
+        setBotStatus("running");
+        setLogs(prev => [...prev, "WhatsApp bot is now running"]);
+      } else {
+        setBotStatus("idle");
+      }
+    });
+
+    const qrUnsubscribe = whatsAppService.on('qrCode', () => {
+      setBotStatus("initializing");
+      setLogs(prev => [...prev, "QR code generated, waiting for scan..."]);
+    });
+
+    const authUnsubscribe = whatsAppService.on('authenticated', () => {
+      setLogs(prev => [...prev, "WhatsApp authenticated successfully"]);
+    });
+
+    // Connect to WebSocket server
+    whatsAppService.connect();
+
+    // Cleanup listeners on component unmount
+    return () => {
+      statusUnsubscribe();
+      qrUnsubscribe();
+      authUnsubscribe();
+    };
+  }, []);
+
   const startBot = () => {
     setBotStatus("initializing");
     setLogs(prev => [...prev, "Starting WhatsApp bot..."]);
-    
-    // Simulate initialization
-    setTimeout(() => {
-      setBotStatus("running");
-      setLogs(prev => [...prev, "WhatsApp bot is ready and running"]);
-      toast({
-        title: "Bot Started",
-        description: "WhatsApp bot is now running and ready to process messages.",
-      });
-    }, 2000);
+    whatsAppService.initialize();
   };
 
   const stopBot = () => {
     setBotStatus("idle");
     setLogs(prev => [...prev, "WhatsApp bot stopped"]);
     setConnected(false);
+    whatsAppService.disconnect();
     toast({
       title: "Bot Stopped",
       description: "WhatsApp bot has been stopped.",
@@ -40,7 +73,6 @@ export function WhatsAppBot() {
 
   const handleConnect = () => {
     setConnected(true);
-    startBot();
   };
 
   return (
@@ -53,8 +85,8 @@ export function WhatsAppBot() {
             <CardHeader>
               <CardTitle className="flex items-center">
                 <span className="relative flex h-3 w-3 mr-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-whatsapp opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-whatsapp"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                 </span>
                 WhatsApp Connected
               </CardTitle>
@@ -118,7 +150,7 @@ export function WhatsAppBot() {
             {botStatus !== "running" && (
               <Button 
                 onClick={startBot} 
-                className="bg-whatsapp hover:bg-whatsapp-dark"
+                className="bg-green-600 hover:bg-green-700"
                 disabled={botStatus === "initializing"}
               >
                 {botStatus === "initializing" ? (

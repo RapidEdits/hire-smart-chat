@@ -3,25 +3,70 @@ const express = require('express');
 const axios = require('axios');
 const qrcode = require('qrcode-terminal');
 const fs = require('fs');
+const http = require('http');
+const socketIo = require('socket.io');
+const cors = require('cors');
+const qr = require('qrcode');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
+
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 const client = new Client({
     authStrategy: new LocalAuth()
 });
 
 const ADMIN_NUMBER = '916200083509@c.us';
+let isConnected = false;
+
+// Handle socket connections
+io.on('connection', (socket) => {
+    console.log('New client connected');
+    
+    // Send current connection status
+    socket.emit('connectionStatus', { isConnected });
+    
+    // Handle client request to initialize
+    socket.on('initialize', () => {
+        if (!isConnected) {
+            client.initialize();
+        } else {
+            socket.emit('connectionStatus', { isConnected: true });
+        }
+    });
+    
+    socket.on('disconnect', () => {
+        console.log('Client disconnected');
+    });
+});
 
 // Show QR code for login
-client.on('qr', qr => {
+client.on('qr', async (qrCode) => {
     console.log("📱 Scan this QR code to login:");
-    qrcode.generate(qr, { small: true });
+    qrcode.generate(qrCode, { small: true });
+    
+    try {
+        // Convert QR code to data URL
+        const qrDataURL = await qr.toDataURL(qrCode);
+        io.emit('qrCode', { qrDataURL });
+    } catch (err) {
+        console.error('Error generating QR code:', err);
+    }
 });
 
 // WhatsApp bot is ready
 client.on('ready', async () => {
     console.log('✅ WhatsApp Bot is ready!');
+    isConnected = true;
+    io.emit('connectionStatus', { isConnected: true });
 
     const numbers = fs.readFileSync('C:/Users/Susic/Documents/whatsapp-bot/whatsapp-node-bridge/numbers.txt', 'utf-8')
         .split('\n')
@@ -41,6 +86,12 @@ client.on('ready', async () => {
             await new Promise(r => setTimeout(r, 1000));
         }
     }
+});
+
+// Handle authenticated event
+client.on('authenticated', () => {
+    console.log('✅ WhatsApp authenticated');
+    io.emit('authenticated');
 });
 
 // Handle incoming user message
@@ -85,8 +136,14 @@ app.post('/notify', async (req, res) => {
     }
 });
 
-app.listen(3000, () => {
+// Status endpoint
+app.get('/status', (req, res) => {
+    res.json({ isConnected });
+});
+
+server.listen(3000, () => {
     console.log('🌐 Express server running at http://localhost:3000');
 });
 
-client.initialize();
+// Don't auto-initialize, let the frontend trigger it
+// client.initialize();
