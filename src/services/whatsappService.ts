@@ -11,7 +11,8 @@ class WhatsAppService {
     this.listeners = new Map([
       ['qrCode', new Set()],
       ['connectionStatus', new Set()],
-      ['authenticated', new Set()]
+      ['authenticated', new Set()],
+      ['serverStatus', new Set()],
     ]);
   }
 
@@ -36,6 +37,10 @@ class WhatsAppService {
       this.notifyListeners('authenticated', null);
     });
     
+    this.socket.on('serverStatus', (status) => {
+      this.notifyListeners('serverStatus', status);
+    });
+    
     this.socket.on('disconnect', () => {
       console.log('Disconnected from WhatsApp server');
     });
@@ -44,6 +49,13 @@ class WhatsAppService {
   initialize() {
     if (!this.socket) this.connect();
     this.socket?.emit('initialize');
+  }
+
+  startServers() {
+    // Emit an event to start both the Node.js and Python servers
+    if (!this.socket) this.connect();
+    this.socket?.emit('startServers');
+    return this.getServerStatus();
   }
 
   disconnect() {
@@ -77,6 +89,17 @@ class WhatsAppService {
     } catch (error) {
       console.error('Error fetching WhatsApp status:', error);
       return { isConnected: false };
+    }
+  }
+
+  async getServerStatus() {
+    try {
+      const response = await fetch(`${SERVER_URL}/server-status`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching server status:', error);
+      return { nodeServer: false, pythonServer: false };
     }
   }
 }
