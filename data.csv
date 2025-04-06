@@ -1,0 +1,8 @@
+step,match,ask
+interest,"yes|ya|sure|interested|haan|haanji|ok|haa|S",""
+company,"","Currently in which company are you working?"
+notice,"","Ok and your notice period?"
+ctc,"","Ok, What's your current CTC?"
+product,"","Ok, Which product are you currently handling?"
+experience,"","How many years of experience in this product?"
+cv,"","Kindly forward me your CV."
