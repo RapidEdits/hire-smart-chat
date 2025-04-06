@@ -1,3 +1,4 @@
+
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const axios = require('axios');
@@ -7,6 +8,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const qr = require('qrcode');
+const { spawn } = require('child_process');
 
 const app = express();
 app.use(cors());
@@ -27,11 +29,70 @@ const client = new Client({
 const ADMIN_NUMBER = '916200083509@c.us';
 let isConnected = false;
 
+// Server status tracking
+let serverStatus = {
+    nodeServer: true,  // Since we're running this file, Node.js server is active
+    pythonServer: false
+};
+
+let pythonProcess = null;
+
+// Function to check if Python server is running
+const checkPythonServer = async () => {
+    try {
+        const response = await axios.get('http://localhost:5000/ping', { timeout: 2000 });
+        return response.status === 200;
+    } catch (error) {
+        return false;
+    }
+};
+
+// Function to start Python server
+const startPythonServer = () => {
+    if (pythonProcess) {
+        // Python process already exists, check if it's still running
+        if (pythonProcess.exitCode === null) {
+            console.log('Python server is already running');
+            return;
+        }
+    }
+    
+    console.log('Starting Python server...');
+    // Adjust the path to your Python executable and app.py file as needed
+    pythonProcess = spawn('python', ['app.py']);
+    
+    pythonProcess.stdout.on('data', (data) => {
+        console.log(`Python server: ${data}`);
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+        console.error(`Python server error: ${data}`);
+    });
+    
+    pythonProcess.on('close', (code) => {
+        console.log(`Python server process exited with code ${code}`);
+        serverStatus.pythonServer = false;
+        io.emit('serverStatus', serverStatus);
+    });
+    
+    // Give the server a moment to start
+    setTimeout(async () => {
+        serverStatus.pythonServer = await checkPythonServer();
+        io.emit('serverStatus', serverStatus);
+    }, 3000);
+};
+
+// Initial check for Python server
+(async () => {
+    serverStatus.pythonServer = await checkPythonServer();
+})();
+
 // Handle socket connections
 io.on('connection', (socket) => {
     console.log('New client connected');
     
-    // Send current connection status
+    // Send current server and connection status
+    socket.emit('serverStatus', serverStatus);
     socket.emit('connectionStatus', { isConnected });
     
     // Handle client request to initialize
@@ -41,6 +102,19 @@ io.on('connection', (socket) => {
         } else {
             socket.emit('connectionStatus', { isConnected: true });
         }
+    });
+    
+    // Handle client request to start servers
+    socket.on('startServers', async () => {
+        console.log('Request to start servers received');
+        
+        // Start Python server if not running
+        if (!serverStatus.pythonServer) {
+            startPythonServer();
+        }
+        
+        // Send current server status
+        socket.emit('serverStatus', serverStatus);
     });
     
     socket.on('disconnect', () => {
@@ -136,9 +210,21 @@ app.post('/notify', async (req, res) => {
     }
 });
 
+// Add endpoint to check if Python server is alive
+app.get('/ping', (req, res) => {
+    res.status(200).send('pong');
+});
+
 // Status endpoint
 app.get('/status', (req, res) => {
     res.json({ isConnected });
+});
+
+// Server status endpoint
+app.get('/server-status', async (req, res) => {
+    // Re-check Python server status
+    serverStatus.pythonServer = await checkPythonServer();
+    res.json(serverStatus);
 });
 
 server.listen(3000, () => {
