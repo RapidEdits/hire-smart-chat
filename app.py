@@ -34,7 +34,7 @@ FAQ_RESPONSES = dict(zip(faq_df['key'], faq_df['response']))
 # Qualification criteria
 QUALIFICATION_CRITERIA = {
     'min_experience': 2,  # Minimum years of experience
-    'min_ctc': 5,         # Minimum CTC in LPA
+    'min_ctc': 1,         # Minimum CTC in LPA
     'notice_period_max': 60  # Maximum notice period in days
 }
 
