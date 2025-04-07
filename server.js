@@ -142,23 +142,39 @@ client.on('ready', async () => {
     isConnected = true;
     io.emit('connectionStatus', { isConnected: true });
 
-    const numbers = fs.readFileSync('C:/Users/Susic/Documents/whatsapp-bot/whatsapp-node-bridge/numbers.txt', 'utf-8')
-        .split('\n')
-        .map(n => n.trim())
-        .filter(n => n.length > 0);
-
-    const startMessages = [
-        "Hi Pratyush here, I got your number from Naukri.com.",
-        "I messaged you regarding a job opening in Shubham Housing Finance for the profile of Relationship Manager / Sales Manager in Home Loan, LAP and Mortgage.",
-        "Are you interested in Kota Location?"
-    ];
-
-    for (const number of numbers) {
-        const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
-        for (const msg of startMessages) {
-            await client.sendMessage(chatId, msg);
-            await new Promise(r => setTimeout(r, 1000));
+    // Load start messages if file exists
+    let startMessages = [];
+    try {
+        if (fs.existsSync('start_messages.txt')) {
+            startMessages = fs.readFileSync('start_messages.txt', 'utf-8')
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+        } else {
+            startMessages = [
+                "Hi Pratyush here, I got your number from Naukri.com.",
+                "I messaged you regarding a job opening in Shubham Housing Finance for the profile of Relationship Manager / Sales Manager in Home Loan, LAP and Mortgage.",
+                "Are you interested in Kota Location?"
+            ];
         }
+
+        // Check if numbers.txt exists
+        if (fs.existsSync('numbers.txt')) {
+            const numbers = fs.readFileSync('numbers.txt', 'utf-8')
+                .split('\n')
+                .map(n => n.trim())
+                .filter(n => n.length > 0);
+
+            for (const number of numbers) {
+                const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
+                for (const msg of startMessages) {
+                    await client.sendMessage(chatId, msg);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Error sending initial messages:', err);
     }
 });
 

@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 import os, json
 from fuzzywuzzy import fuzz
@@ -39,6 +40,10 @@ def fuzzy_match(message, match_str):
     keywords = match_str.split('|')
     return any(fuzz.partial_ratio(message.lower(), k.lower()) > 70 for k in keywords)
 
+@app.route('/ping', methods=['GET'])
+def ping():
+    return "pong", 200
+
 @app.route('/ask', methods=['POST'])
 def ask():
     data = request.json
@@ -73,7 +78,7 @@ def ask():
 
         try:
             requests.post("http://localhost:3000/notify", json={
-                "message": admin_message  # ✅ Fixed: removed "to"
+                "message": admin_message
             })
         except Exception as e:
             print(f"[ERROR] Failed to notify admin: {e}")
