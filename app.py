@@ -31,6 +31,13 @@ step_map = {q['step']: q for q in flow}
 faq_df = pd.read_csv(FAQ_FILE) if os.path.exists(FAQ_FILE) else pd.DataFrame(columns=['key', 'response'])
 FAQ_RESPONSES = dict(zip(faq_df['key'], faq_df['response']))
 
+# Qualification criteria
+QUALIFICATION_CRITERIA = {
+    'min_experience': 2,  # Minimum years of experience
+    'min_ctc': 5,         # Minimum CTC in LPA
+    'notice_period_max': 60  # Maximum notice period in days
+}
+
 def load_state():
     with open(STATE_FILE) as f:
         return json.load(f)
@@ -51,6 +58,40 @@ def detect_faq(message):
         if key.lower() in message:
             return key
     return None
+
+def is_qualified(answers):
+    """Determine if a candidate is qualified based on their answers"""
+    try:
+        # Extract experience (convert to float)
+        exp_str = answers.get('experience', '0')
+        experience = float(''.join(c for c in exp_str if c.isdigit() or c == '.') or '0')
+        
+        # Extract CTC (convert to float)
+        ctc_str = answers.get('ctc', '0')
+        ctc = float(''.join(c for c in ctc_str if c.isdigit() or c == '.') or '0')
+        
+        # Extract notice period (convert to days)
+        notice_str = answers.get('notice', '0')
+        notice = 0
+        
+        # Handle different notice period formats (days, weeks, months)
+        if 'day' in notice_str.lower():
+            notice = float(''.join(c for c in notice_str if c.isdigit() or c == '.') or '0')
+        elif 'week' in notice_str.lower():
+            notice = float(''.join(c for c in notice_str if c.isdigit() or c == '.') or '0') * 7
+        elif 'month' in notice_str.lower():
+            notice = float(''.join(c for c in notice_str if c.isdigit() or c == '.') or '0') * 30
+        else:
+            # Default to days if no unit specified
+            notice = float(''.join(c for c in notice_str if c.isdigit() or c == '.') or '0')
+            
+        # Check if candidate meets all criteria
+        return (experience >= QUALIFICATION_CRITERIA['min_experience'] and 
+                ctc >= QUALIFICATION_CRITERIA['min_ctc'] and 
+                notice <= QUALIFICATION_CRITERIA['notice_period_max'])
+    except Exception as e:
+        print(f"Error in qualification assessment: {e}")
+        return False
 
 @app.route('/ping', methods=['GET'])
 def ping():
@@ -91,16 +132,55 @@ def ask():
         next_question = next_question.format(**user["answers"])  # dynamic fill
         reply = next_question
     else:
-        # All questions done — send to admin
-        final_info = '\n'.join([f"{k}: {v}" for k, v in user["answers"].items()])
-        admin_message = f"✅ Info collected from {sender}:\n{final_info}"
+        # All questions done — check qualification and send to admin
+        answers = user["answers"]
+        qualified = is_qualified(answers)
+        
+        # Add qualification status to the answers
+        answers['qualified'] = "Yes" if qualified else "No"
+        answers['phone'] = sender.split('@')[0]  # Extract phone number
+        
+        # Format message with qualification status
+        final_info = '\n'.join([f"{k}: {v}" for k, v in answers.items()])
+        qualification_status = "✅ QUALIFIED" if qualified else "❌ NOT QUALIFIED"
+        admin_message = f"{qualification_status}\nInfo from {sender}:\n{final_info}"
 
         try:
+            # Save candidate to candidates.json if file exists
+            candidates_file = 'candidates.json'
+            candidates = []
+            
+            if os.path.exists(candidates_file):
+                with open(candidates_file, 'r') as f:
+                    candidates = json.load(f)
+            
+            # Create candidate record
+            candidate = {
+                'id': len(candidates) + 1,
+                'name': answers.get('company', 'Unknown'),  # We don't collect name, use company as identifier
+                'phone': sender.split('@')[0],
+                'company': answers.get('company', 'Unknown'),
+                'experience': answers.get('experience', 'Unknown'),
+                'ctc': answers.get('ctc', 'Unknown'),
+                'product': answers.get('product', 'Unknown'),
+                'notice': answers.get('notice', 'Unknown'),
+                'qualified': qualified,
+                'date_added': datetime.now().isoformat(),
+                'interview_scheduled': qualified  # Auto-schedule interview for qualified candidates
+            }
+            
+            candidates.append(candidate)
+            
+            # Save updated candidates list
+            with open(candidates_file, 'w') as f:
+                json.dump(candidates, f, indent=2)
+            
+            # Notify admin
             requests.post("http://localhost:3000/notify", json={
                 "message": admin_message
             })
         except Exception as e:
-            print(f"[ERROR] Failed to notify admin: {e}")
+            print(f"[ERROR] Failed to process candidate: {e}")
 
         reply = "__COMPLETE__"  # for Node.js to detect end
         state.pop(sender, None)  # clear conversation state
@@ -116,6 +196,33 @@ def ask():
         f.write(f"{datetime.now().isoformat()} - {current_step}: {message}\n")
 
     return jsonify({"reply": reply})
+
+@app.route('/candidates', methods=['GET'])
+def get_candidates():
+    """API endpoint to get all candidates"""
+    candidates_file = 'candidates.json'
+    
+    if not os.path.exists(candidates_file):
+        return jsonify([])
+    
+    with open(candidates_file, 'r') as f:
+        candidates = json.load(f)
+    
+    return jsonify(candidates)
+
+@app.route('/qualified-candidates', methods=['GET'])
+def get_qualified_candidates():
+    """API endpoint to get only qualified candidates"""
+    candidates_file = 'candidates.json'
+    
+    if not os.path.exists(candidates_file):
+        return jsonify([])
+    
+    with open(candidates_file, 'r') as f:
+        candidates = json.load(f)
+    
+    qualified = [c for c in candidates if c.get('qualified', False)]
+    return jsonify(qualified)
 
 if __name__ == '__main__':
     app.run(port=5000)

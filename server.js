@@ -214,6 +214,22 @@ client.on('message', async msg => {
     }
 });
 
+// Get active chat count
+app.get('/active-chats', (req, res) => {
+    try {
+        if (fs.existsSync('state.json')) {
+            const state = JSON.parse(fs.readFileSync('state.json', 'utf-8'));
+            const activeChatsCount = Object.keys(state).length;
+            res.json({ count: activeChatsCount });
+        } else {
+            res.json({ count: 0 });
+        }
+    } catch (error) {
+        console.error('Error reading active chats:', error);
+        res.json({ count: 0 });
+    }
+});
+
 // Listen for /notify to send admin messages from Python
 app.post('/notify', async (req, res) => {
     const { message } = req.body;
