@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 import os, json
 from fuzzywuzzy import fuzz
@@ -35,6 +34,7 @@ FAQ_RESPONSES = dict(zip(faq_df['key'], faq_df['response']))
 QUALIFICATION_CRITERIA = {
     'min_experience': 2,  # Minimum years of experience
     'min_ctc': 1,         # Minimum CTC in LPA
+    'max_ctc': 6,         # Maximum CTC in LPA
     'notice_period_max': 60  # Maximum notice period in days
 }
 
@@ -88,6 +88,7 @@ def is_qualified(answers):
         # Check if candidate meets all criteria
         return (experience >= QUALIFICATION_CRITERIA['min_experience'] and 
                 ctc >= QUALIFICATION_CRITERIA['min_ctc'] and 
+                ctc <= QUALIFICATION_CRITERIA['max_ctc'] and 
                 notice <= QUALIFICATION_CRITERIA['notice_period_max'])
     except Exception as e:
         print(f"Error in qualification assessment: {e}")

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { QRCodeConnect } from "./QRCodeConnect";
@@ -30,30 +29,24 @@ export function Dashboard() {
   const navigate = useNavigate();
   
   useEffect(() => {
-    // Function to fetch candidates data
     const fetchData = async () => {
       try {
         setLoading(true);
         
-        // Check if Python server is running before making API calls
         const pingResponse = await axios.get('http://localhost:5000/ping');
         
         if (pingResponse.status === 200) {
-          // Get all candidates
           const candidatesResponse = await axios.get('http://localhost:5000/candidates');
           setCandidates(candidatesResponse.data || []);
           
-          // Get qualified candidates
           const qualifiedResponse = await axios.get('http://localhost:5000/qualified-candidates');
           setQualifiedCandidates(qualifiedResponse.data || []);
           
-          // Get active chats count (number of files in state.json that aren't completed)
           const stateResponse = await axios.get('http://localhost:3000/active-chats');
           setActiveChatCount(stateResponse.data?.count || 0);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
-        // Initialize with empty arrays if server is not running
         setCandidates([]);
         setQualifiedCandidates([]);
         setActiveChatCount(0);
@@ -64,10 +57,8 @@ export function Dashboard() {
     
     fetchData();
     
-    // Set up an interval to refresh data every 30 seconds
     const intervalId = setInterval(fetchData, 30000);
     
-    // Clean up interval on component unmount
     return () => clearInterval(intervalId);
   }, []);
   
@@ -294,7 +285,7 @@ export function Dashboard() {
                       <p className="text-sm font-medium mb-2">Qualification Criteria:</p>
                       <ul className="text-sm space-y-1 text-muted-foreground">
                         <li>• Minimum experience: 2 years</li>
-                        <li>• Minimum CTC: 5 LPA</li>
+                        <li>• CTC range: 1-6 LPA</li>
                         <li>• Maximum notice period: 60 days</li>
                       </ul>
                     </div>
