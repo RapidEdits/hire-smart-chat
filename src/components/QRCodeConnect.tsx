@@ -23,6 +23,7 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
   const [startAttempted, setStartAttempted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPreviewMode] = useState(whatsAppService.isInPreviewMode());
+  const [startServerClickCount, setStartServerClickCount] = useState(0);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -73,6 +74,7 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
     });
 
     const serverStatusUnsubscribe = whatsAppService.on('serverStatus', (status) => {
+      console.log("Server status update:", status);
       setServerStatus(status);
       setStartingServers(false);
       
@@ -87,12 +89,20 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
             handleConnect();
           }, 1000);
         }
-      } else {
-        setErrorMessage("Server startup failed. Please check your installation.");
+      } else if (startAttempted) {
+        // If we attempted to start the servers but they're not both running
+        if (status.nodeServer && !status.pythonServer) {
+          setErrorMessage("Python server failed to start. Please check your Python installation.");
+        } else if (!status.nodeServer) {
+          setErrorMessage("Node.js server is not running. Please start the server with 'node server.js'.");
+        } else {
+          setErrorMessage("Server startup failed. Please check your installation.");
+        }
       }
     });
     
     const errorUnsubscribe = whatsAppService.on('error', (error: { message: string }) => {
+      console.error("Error from WhatsApp service:", error.message);
       setErrorMessage(error.message);
       setStartingServers(false);
       
@@ -120,8 +130,18 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
     setStartingServers(true);
     setStartAttempted(true);
     setErrorMessage(null);
+    setStartServerClickCount(prev => prev + 1);
+    
+    // Provide specific guidance after multiple attempts
+    if (startServerClickCount >= 2) {
+      toast({
+        title: "Troubleshooting Tip",
+        description: "If server won't start, ensure 'node server.js' is running in a terminal before clicking the button."
+      });
+    }
     
     try {
+      console.log("Starting WhatsApp servers...");
       // Start the server
       await whatsAppService.startServers();
       
@@ -136,12 +156,12 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       setStartingServers(false);
       
       if (!errorMessage) {
-        setErrorMessage("Failed to start the servers. Please check your installation.");
+        setErrorMessage("Failed to start the servers. Please ensure Node.js server is running with 'node server.js'.");
       }
       
       toast({
         title: "Server Error",
-        description: "Could not start the servers. Please check that the server application is installed.",
+        description: "Could not start the servers. Please check the Node.js server is running.",
         variant: "destructive"
       });
     }
@@ -242,6 +262,18 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
               </div>
             </div>
             
+            {!serverStatus.nodeServer && (
+              <Alert className="mb-4 bg-blue-50 border-blue-200 text-blue-800">
+                <AlertTitle>Important</AlertTitle>
+                <AlertDescription>
+                  Make sure the Node.js server is running. Open a terminal in your project directory and run:
+                  <code className="block mt-2 p-2 bg-gray-800 text-white rounded font-mono text-sm">
+                    node server.js
+                  </code>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <Button 
               onClick={startServers} 
               className="bg-green-600 hover:bg-green-700 w-full"

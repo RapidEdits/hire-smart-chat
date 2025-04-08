@@ -17,6 +17,7 @@ class WhatsAppService {
   private connectionAttempts: number = 0;
   private maxConnectionAttempts: number = 3;
   private isPreviewMode: boolean = isPreviewEnvironment;
+  private serverStartTimeout: number | null = null;
 
   constructor() {
     this.listeners = new Map([
@@ -44,6 +45,8 @@ class WhatsAppService {
     }
     
     try {
+      console.log('Attempting to connect to WebSocket server at:', SERVER_URL);
+      
       this.socket = io(SERVER_URL, {
         reconnectionAttempts: this.maxConnectionAttempts,
         timeout: 10000, // 10 seconds timeout
@@ -71,19 +74,29 @@ class WhatsAppService {
       });
       
       this.socket.on('qrCode', (data) => {
+        console.log('QR code received from server');
         this.notifyListeners('qrCode', data);
       });
       
       this.socket.on('connectionStatus', (data) => {
+        console.log('Connection status update:', data);
         this.notifyListeners('connectionStatus', data);
       });
       
       this.socket.on('authenticated', () => {
+        console.log('WhatsApp authenticated');
         this.notifyListeners('authenticated', null);
       });
       
       this.socket.on('serverStatus', (status) => {
+        console.log('Server status update:', status);
         this.notifyListeners('serverStatus', status);
+        
+        // Clear the server start timeout if it exists
+        if (this.serverStartTimeout) {
+          clearTimeout(this.serverStartTimeout);
+          this.serverStartTimeout = null;
+        }
       });
       
       this.socket.on('disconnect', () => {
@@ -109,10 +122,12 @@ class WhatsAppService {
     }
     
     if (!this.socket || !this.socket.connected) {
+      console.log('Socket not connected, connecting now');
       this.connect();
     }
     
     if (this.socket) {
+      console.log('Sending initialize command to server');
       this.socket.emit('initialize');
     }
   }
@@ -131,34 +146,54 @@ class WhatsAppService {
       }
       
       if (!this.socket || !this.socket.connected) {
+        console.log('Socket not connected, connecting now before starting servers');
         this.connect();
       }
       
       if (this.socket) {
+        console.log('Sending startServers command to server');
+        
         // Set a timeout in case the server doesn't respond
-        const timeoutId = setTimeout(() => {
-          reject(new Error('Server start timeout'));
+        this.serverStartTimeout = window.setTimeout(() => {
+          console.error('Server start timeout');
           this.notifyListeners('error', { 
-            message: 'Server start timed out. Please check if the server application is installed correctly.'
+            message: 'Server start timed out. Please check if the server application is installed correctly and the Node.js server is running.'
           });
-        }, 15000); // 15 seconds timeout
+          reject(new Error('Server start timeout'));
+        }, 20000); // 20 seconds timeout
         
         // Wait for server status update
         const statusHandler = (status: {nodeServer: boolean, pythonServer: boolean}) => {
-          clearTimeout(timeoutId);
+          console.log('Received server status in startServers:', status);
+          clearTimeout(this.serverStartTimeout as number);
+          this.serverStartTimeout = null;
           this.off('serverStatus', statusHandler);
           resolve(status);
         };
         
+        // Error handler in case of issues
+        const errorHandler = (error: { message: string }) => {
+          console.error('Error starting servers:', error.message);
+          if (this.serverStartTimeout) {
+            clearTimeout(this.serverStartTimeout);
+            this.serverStartTimeout = null;
+          }
+          this.off('error', errorHandler);
+          // Don't reject immediately, let the timeout handle it
+          // This prevents multiple error notifications
+        };
+        
         // Listen for status update
         this.on('serverStatus', statusHandler);
+        this.on('error', errorHandler);
         
         // Send start command
         this.socket.emit('startServers');
       } else {
+        console.error('Socket not connected, cannot start servers');
         reject(new Error('Socket not connected'));
         this.notifyListeners('error', { 
-          message: 'Cannot start servers: Socket not connected'
+          message: 'Cannot start servers: Socket not connected. Make sure the Node.js server is running.'
         });
       }
     });
@@ -166,6 +201,7 @@ class WhatsAppService {
 
   disconnect() {
     if (this.socket) {
+      console.log('Disconnecting from WhatsApp server');
       this.socket.disconnect();
       this.socket = null;
     }
@@ -208,8 +244,10 @@ class WhatsAppService {
     }
     
     try {
+      console.log('Fetching server status from:', `${SERVER_URL}/server-status`);
       const response = await fetch(`${SERVER_URL}/server-status`);
       const data = await response.json();
+      console.log('Server status response:', data);
       return data;
     } catch (error) {
       console.error('Error fetching server status:', error);
