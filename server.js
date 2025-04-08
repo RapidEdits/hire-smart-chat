@@ -1,22 +1,27 @@
 
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const express = require('express');
-const axios = require('axios');
-const qrcode = require('qrcode-terminal');
-const fs = require('fs');
-const http = require('http');
-const socketIo = require('socket.io');
-const cors = require('cors');
-const qr = require('qrcode');
-const { spawn } = require('child_process');
-const path = require('path');
+import { Client, LocalAuth } from 'whatsapp-web.js';
+import express from 'express';
+import axios from 'axios';
+import qrcode from 'qrcode-terminal';
+import fs from 'fs';
+import http from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import qr from 'qrcode';
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get current file directory (equivalent to __dirname in CommonJS)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-const io = socketIo(server, {
+const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
