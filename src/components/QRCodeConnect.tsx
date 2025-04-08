@@ -2,9 +2,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { Loader2, QrCode, RefreshCw, Smartphone, Server } from "lucide-react";
+import { Loader2, QrCode, RefreshCw, Smartphone, Server, AlertTriangle } from "lucide-react";
 import { whatsAppService } from "@/services/whatsappService";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 
 type QRCodeConnectProps = {
   onConnect: () => void;
@@ -20,6 +21,8 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
   }>({ nodeServer: false, pythonServer: false });
   const [startingServers, setStartingServers] = useState(false);
   const [startAttempted, setStartAttempted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPreviewMode] = useState(whatsAppService.isInPreviewMode());
   const { toast } = useToast();
 
   useEffect(() => {
@@ -48,6 +51,7 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
     const qrUnsubscribe = whatsAppService.on('qrCode', (data: { qrDataURL: string }) => {
       setQrCodeUrl(data.qrDataURL);
       setStartingServers(false);
+      setErrorMessage(null);
     });
 
     const statusUnsubscribe = whatsAppService.on('connectionStatus', (data: { isConnected: boolean }) => {
@@ -83,7 +87,20 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
             handleConnect();
           }, 1000);
         }
+      } else {
+        setErrorMessage("Server startup failed. Please check your installation.");
       }
+    });
+    
+    const errorUnsubscribe = whatsAppService.on('error', (error: { message: string }) => {
+      setErrorMessage(error.message);
+      setStartingServers(false);
+      
+      toast({
+        title: "Connection Error",
+        description: error.message,
+        variant: "destructive"
+      });
     });
 
     // Connect to WebSocket server (but don't crash if it fails)
@@ -95,12 +112,14 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       statusUnsubscribe();
       authUnsubscribe();
       serverStatusUnsubscribe();
+      errorUnsubscribe();
     };
   }, [onConnect, toast, startAttempted]);
 
   const startServers = async () => {
     setStartingServers(true);
     setStartAttempted(true);
+    setErrorMessage(null);
     
     try {
       // Start the server
@@ -116,6 +135,10 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       console.error('Error starting servers:', error);
       setStartingServers(false);
       
+      if (!errorMessage) {
+        setErrorMessage("Failed to start the servers. Please check your installation.");
+      }
+      
       toast({
         title: "Server Error",
         description: "Could not start the servers. Please check that the server application is installed.",
@@ -127,11 +150,13 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
   const handleConnect = () => {
     setConnecting(true);
     setQrCodeUrl(null);
+    setErrorMessage(null);
     whatsAppService.initialize();
   };
 
   const handleRefresh = () => {
     setQrCodeUrl(null);
+    setErrorMessage(null);
     handleConnect();
   };
 
@@ -175,10 +200,31 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
           Connect WhatsApp
         </CardTitle>
         <CardDescription>
-          Start the servers and scan the QR code with WhatsApp on your phone to connect
+          {isPreviewMode 
+            ? "This feature requires a local WhatsApp server"
+            : "Start the servers and scan the QR code with WhatsApp on your phone to connect"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center">
+        {isPreviewMode && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Preview Mode Detected</AlertTitle>
+            <AlertDescription>
+              This application requires a local WhatsApp server to function. 
+              Please download and run this application locally on your machine.
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {errorMessage && !isPreviewMode && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Connection Error</AlertTitle>
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+      
         {!serverStatus.nodeServer || !serverStatus.pythonServer ? (
           <div className="w-full">
             <div className="mb-4 p-4 bg-gray-50 rounded-md">
@@ -199,7 +245,7 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
             <Button 
               onClick={startServers} 
               className="bg-green-600 hover:bg-green-700 w-full"
-              disabled={startingServers}
+              disabled={startingServers || isPreviewMode}
             >
               {startingServers ? (
                 <>
@@ -218,12 +264,13 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
           <Button 
             onClick={handleConnect} 
             className="bg-green-600 hover:bg-green-700"
+            disabled={isPreviewMode}
           >
             Connect to WhatsApp
           </Button>
         ) : null}
         
-        {connecting && !qrCodeUrl && serverStatus.nodeServer && serverStatus.pythonServer && (
+        {connecting && !qrCodeUrl && serverStatus.nodeServer && serverStatus.pythonServer && !errorMessage && (
           <div className="flex flex-col items-center py-8">
             <Loader2 className="w-8 h-8 animate-spin text-green-600" />
             <p className="mt-4 text-sm text-gray-500">Generating QR code...</p>
