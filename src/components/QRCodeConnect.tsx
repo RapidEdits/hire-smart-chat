@@ -19,20 +19,29 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
     pythonServer: boolean;
   }>({ nodeServer: false, pythonServer: false });
   const [startingServers, setStartingServers] = useState(false);
+  const [startAttempted, setStartAttempted] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     // Check initial connection status
-    whatsAppService.getStatus().then(({ isConnected }) => {
-      if (isConnected) {
+    whatsAppService.getStatus().catch(() => {
+      // If we can't connect to the server, assume it's not running
+      setServerStatus({ nodeServer: false, pythonServer: false });
+    }).then((status) => {
+      if (status?.isConnected) {
         setConnected(true);
         onConnect();
       }
     });
 
     // Check initial server status
-    whatsAppService.getServerStatus().then((status) => {
-      setServerStatus(status);
+    whatsAppService.getServerStatus().catch(() => {
+      // If we can't get the status, assume servers are down
+      setServerStatus({ nodeServer: false, pythonServer: false });
+    }).then((status) => {
+      if (status) {
+        setServerStatus(status);
+      }
     });
 
     // Set up WebSocket listeners
@@ -61,16 +70,23 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
 
     const serverStatusUnsubscribe = whatsAppService.on('serverStatus', (status) => {
       setServerStatus(status);
+      setStartingServers(false);
+      
       if (status.nodeServer && status.pythonServer) {
         toast({
           title: "Servers Started",
           description: "WhatsApp bot servers are now running."
         });
-        handleConnect();
+        
+        if (startAttempted) {
+          setTimeout(() => {
+            handleConnect();
+          }, 1000);
+        }
       }
     });
 
-    // Connect to WebSocket server
+    // Connect to WebSocket server (but don't crash if it fails)
     whatsAppService.connect();
 
     // Cleanup listeners on component unmount
@@ -80,34 +96,29 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       authUnsubscribe();
       serverStatusUnsubscribe();
     };
-  }, [onConnect, toast]);
+  }, [onConnect, toast, startAttempted]);
 
   const startServers = async () => {
     setStartingServers(true);
+    setStartAttempted(true);
+    
     try {
-      const status = await whatsAppService.startServers();
-      setServerStatus(status);
-      if (status.nodeServer && status.pythonServer) {
-        toast({
-          title: "Servers Started",
-          description: "WhatsApp bot servers are now running."
-        });
-        setTimeout(() => {
-          handleConnect();
-        }, 1000);
-      } else {
-        setStartingServers(false);
-        toast({
-          title: "Server Error",
-          description: "Could not start all required servers.",
-          variant: "destructive"
-        });
-      }
+      // Start the server
+      await whatsAppService.startServers();
+      
+      // We don't need to set server status here as it will come through the socket
+      toast({
+        title: "Starting Servers",
+        description: "Attempting to start WhatsApp bot servers..."
+      });
+      
     } catch (error) {
+      console.error('Error starting servers:', error);
       setStartingServers(false);
+      
       toast({
         title: "Server Error",
-        description: "Failed to start WhatsApp servers.",
+        description: "Could not start the servers. Please check that the server application is installed.",
         variant: "destructive"
       });
     }

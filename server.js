@@ -9,6 +9,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const qr = require('qrcode');
 const { spawn } = require('child_process');
+const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -36,60 +37,144 @@ let serverStatus = {
 };
 
 let pythonProcess = null;
+let pythonStartAttempts = 0;
+const MAX_PYTHON_START_ATTEMPTS = 3;
 
 // Function to check if Python server is running
 const checkPythonServer = async () => {
     try {
-        const response = await axios.get('http://localhost:5000/ping', { timeout: 2000 });
+        const response = await axios.get('http://localhost:5000/ping', { timeout: 5000 });
         return response.status === 200;
     } catch (error) {
+        console.error('Python server check failed:', error.message);
         return false;
     }
 };
 
+// Find the Python executable
+const getPythonExecutable = () => {
+    // Common Python executable names
+    const pythonExecutables = ['python', 'python3', 'py'];
+    
+    // Try each executable
+    for (const executable of pythonExecutables) {
+        try {
+            const result = spawn(executable, ['-c', 'print("Python found")']);
+            if (result.pid) {
+                return executable;
+            }
+        } catch (err) {
+            console.log(`Executable ${executable} not found or not working`);
+        }
+    }
+    
+    // If no executable is found, default to 'python'
+    return 'python';
+};
+
 // Function to start Python server
-const startPythonServer = () => {
+const startPythonServer = async () => {
     if (pythonProcess) {
         // Python process already exists, check if it's still running
         if (pythonProcess.exitCode === null) {
             console.log('Python server is already running');
-            return;
+            return true;
         }
+        // Process exists but has exited, clean it up
+        pythonProcess = null;
     }
     
-    console.log('Starting Python server...');
-    // Adjust the path to your Python executable and app.py file as needed
-    pythonProcess = spawn('python', ['app.py']);
+    // Check if Python server is already running
+    const isRunning = await checkPythonServer();
+    if (isRunning) {
+        console.log('Python server is already running on port 5000');
+        serverStatus.pythonServer = true;
+        return true;
+    }
     
-    pythonProcess.stdout.on('data', (data) => {
-        console.log(`Python server: ${data}`);
-    });
+    if (pythonStartAttempts >= MAX_PYTHON_START_ATTEMPTS) {
+        console.log('Maximum Python start attempts reached, giving up');
+        return false;
+    }
     
-    pythonProcess.stderr.on('data', (data) => {
-        console.error(`Python server error: ${data}`);
-    });
+    pythonStartAttempts++;
+    console.log(`Starting Python server (attempt ${pythonStartAttempts})...`);
     
-    pythonProcess.on('close', (code) => {
-        console.log(`Python server process exited with code ${code}`);
+    try {
+        // Find the Python executable
+        const pythonExecutable = getPythonExecutable();
+        
+        // Get the absolute path to app.py
+        const appPath = path.resolve(process.cwd(), 'app.py');
+        console.log(`Starting Python with ${pythonExecutable} ${appPath}`);
+        
+        // Start the Python process
+        pythonProcess = spawn(pythonExecutable, [appPath], {
+            stdio: 'pipe', // Capture stdout and stderr
+            shell: true // Use shell to resolve path issues
+        });
+        
+        // Log stdout
+        pythonProcess.stdout.on('data', (data) => {
+            console.log(`Python server: ${data}`);
+        });
+        
+        // Log stderr
+        pythonProcess.stderr.on('data', (data) => {
+            console.error(`Python server error: ${data}`);
+        });
+        
+        // Handle process exit
+        pythonProcess.on('close', (code) => {
+            console.log(`Python server process exited with code ${code}`);
+            serverStatus.pythonServer = false;
+            io.emit('serverStatus', serverStatus);
+            pythonProcess = null;
+        });
+        
+        // Wait for the server to start
+        console.log('Waiting for Python server to start...');
+        let attempts = 0;
+        let isServerRunning = false;
+        
+        while (attempts < 10 && !isServerRunning) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            attempts++;
+            try {
+                isServerRunning = await checkPythonServer();
+                if (isServerRunning) {
+                    console.log(`Python server started after ${attempts} seconds`);
+                    break;
+                }
+            } catch (err) {
+                console.log(`Still waiting for Python server (${attempts}/10)...`);
+            }
+        }
+        
+        serverStatus.pythonServer = isServerRunning;
+        io.emit('serverStatus', serverStatus);
+        
+        return isServerRunning;
+    } catch (error) {
+        console.error('Error starting Python server:', error);
         serverStatus.pythonServer = false;
         io.emit('serverStatus', serverStatus);
-    });
-    
-    // Give the server a moment to start
-    setTimeout(async () => {
-        serverStatus.pythonServer = await checkPythonServer();
-        io.emit('serverStatus', serverStatus);
-    }, 3000);
+        return false;
+    }
 };
 
 // Initial check for Python server
 (async () => {
     serverStatus.pythonServer = await checkPythonServer();
+    console.log(`Initial Python server status: ${serverStatus.pythonServer ? 'running' : 'not running'}`);
 })();
 
 // Handle socket connections
 io.on('connection', (socket) => {
     console.log('New client connected');
+    
+    // Reset Python start attempts on new connection
+    pythonStartAttempts = 0;
     
     // Send current server and connection status
     socket.emit('serverStatus', serverStatus);
@@ -110,7 +195,8 @@ io.on('connection', (socket) => {
         
         // Start Python server if not running
         if (!serverStatus.pythonServer) {
-            startPythonServer();
+            const pythonStarted = await startPythonServer();
+            console.log(`Python server start result: ${pythonStarted ? 'success' : 'failure'}`);
         }
         
         // Send current server status
