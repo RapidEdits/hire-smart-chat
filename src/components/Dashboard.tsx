@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { QRCodeConnect } from "./QRCodeConnect";
@@ -17,12 +18,22 @@ type Candidate = {
   ctc: string;
   qualified: boolean;
   interview_scheduled: boolean;
+  date_added?: string;
+};
+
+type Conversation = {
+  id: string;
+  phoneNumber: string;
+  lastMessage: string;
+  timestamp: string;
+  status: string;
 };
 
 export function Dashboard() {
   const [connected, setConnected] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [qualifiedCandidates, setQualifiedCandidates] = useState<Candidate[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeChatCount, setActiveChatCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
@@ -33,23 +44,85 @@ export function Dashboard() {
       try {
         setLoading(true);
         
-        const pingResponse = await axios.get('http://localhost:5000/ping');
-        
-        if (pingResponse.status === 200) {
-          const candidatesResponse = await axios.get('http://localhost:5000/candidates');
-          setCandidates(candidatesResponse.data || []);
+        // Check if backend is running
+        try {
+          const pingResponse = await axios.get('http://localhost:5000/ping');
           
-          const qualifiedResponse = await axios.get('http://localhost:5000/qualified-candidates');
-          setQualifiedCandidates(qualifiedResponse.data || []);
-          
-          const stateResponse = await axios.get('http://localhost:3000/active-chats');
-          setActiveChatCount(stateResponse.data?.count || 0);
+          if (pingResponse.status === 200) {
+            // Fetch candidates data
+            const candidatesResponse = await axios.get('http://localhost:5000/candidates');
+            setCandidates(candidatesResponse.data || []);
+            
+            // Fetch qualified candidates
+            const qualifiedResponse = await axios.get('http://localhost:5000/qualified-candidates');
+            setQualifiedCandidates(qualifiedResponse.data || []);
+            
+            // Fetch conversations
+            const conversationsResponse = await axios.get('http://localhost:3000/conversations');
+            setConversations(conversationsResponse.data || []);
+            
+            // Fetch active chats count
+            const stateResponse = await axios.get('http://localhost:3000/active-chats');
+            setActiveChatCount(stateResponse.data?.count || 0);
+            
+            // Check WhatsApp connection status
+            const statusResponse = await axios.get('http://localhost:3000/status');
+            setConnected(statusResponse.data?.isConnected || false);
+          }
+        } catch (error) {
+          console.error('Error connecting to backend:', error);
+          // Use mock data in development/preview mode
+          if (import.meta.env.DEV || window.location.hostname.includes('lovableproject.com')) {
+            console.log('Using mock data in development/preview mode');
+            
+            const mockCandidates = [
+              {
+                id: 1,
+                name: "John Doe",
+                phone: "916200083509",
+                company: "HDFC Bank",
+                experience: "3 years",
+                ctc: "8 LPA",
+                qualified: true,
+                interview_scheduled: true,
+                date_added: new Date().toISOString()
+              },
+              {
+                id: 2,
+                name: "Jane Smith",
+                phone: "919987257230",
+                company: "ICICI Bank",
+                experience: "4 years",
+                ctc: "9 LPA",
+                qualified: true,
+                interview_scheduled: false,
+                date_added: new Date().toISOString()
+              }
+            ];
+            
+            setCandidates(mockCandidates);
+            setQualifiedCandidates(mockCandidates.filter(c => c.qualified));
+            setConversations([
+              { 
+                id: "916200083509@c.us",
+                phoneNumber: "916200083509",
+                lastMessage: "Kindly forward me your CV.",
+                timestamp: new Date().toISOString(),
+                status: "active"
+              },
+              { 
+                id: "919987257230@c.us",
+                phoneNumber: "919987257230",
+                lastMessage: "Ok, Which product are you currently handling?",
+                timestamp: new Date().toISOString(),
+                status: "active"
+              }
+            ]);
+            setActiveChatCount(2);
+          }
         }
       } catch (error) {
         console.error('Error fetching data:', error);
-        setCandidates([]);
-        setQualifiedCandidates([]);
-        setActiveChatCount(0);
       } finally {
         setLoading(false);
       }
@@ -111,8 +184,8 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <div className="text-2xl font-bold">{qualifiedCandidates.length}</div>
-              <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+              <div className="text-2xl font-bold">{qualifiedCandidates.filter(c => c.interview_scheduled).length}</div>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -232,7 +305,7 @@ export function Dashboard() {
                     </div>
                   ) : qualifiedCandidates.length > 0 ? (
                     <div className="space-y-4">
-                      {qualifiedCandidates.map((candidate) => (
+                      {qualifiedCandidates.filter(c => c.qualified).map((candidate) => (
                         <div key={candidate.id} className="flex items-center justify-between border-b pb-3 last:border-0">
                           <div className="flex items-start">
                             <Calendar className="h-4 w-4 mr-2 mt-1 text-green-600" />
@@ -243,7 +316,7 @@ export function Dashboard() {
                               </p>
                             </div>
                           </div>
-                          <Button variant="outline" size="sm">Schedule</Button>
+                          <Button variant="outline" size="sm">{candidate.interview_scheduled ? 'Reschedule' : 'Schedule'}</Button>
                         </div>
                       ))}
                     </div>

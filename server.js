@@ -1,4 +1,3 @@
-
 import { Client, LocalAuth } from 'whatsapp-web.js';
 import express from 'express';
 import axios from 'axios';
@@ -28,11 +27,41 @@ const io = new Server(server, {
   }
 });
 
+// Default settings
+const DEFAULT_SETTINGS = {
+  adminNumber: '916200083509@c.us',
+  initialMessages: [
+    "Hi Pratyush here, I got your number from Naukri.com.",
+    "I messaged you regarding a job opening in Shubham Housing Finance for the profile of Relationship Manager / Sales Manager in Home Loan, LAP and Mortgage.",
+    "Are you interested in Kota Location?"
+  ],
+  autoStart: false,
+  numbersPerBatch: 10,
+  messageDelay: 1000,
+  qualification: {
+    ctcThreshold: 5,
+    experienceThreshold: 2,
+    incentiveThreshold: 5000
+  }
+};
+
+// Initialize settings from file or create with defaults
+let botSettings = DEFAULT_SETTINGS;
+if (fs.existsSync('bot_settings.json')) {
+  try {
+    botSettings = JSON.parse(fs.readFileSync('bot_settings.json', 'utf-8'));
+  } catch (error) {
+    console.error('Error reading bot settings:', error);
+  }
+} else {
+  fs.writeFileSync('bot_settings.json', JSON.stringify(botSettings, null, 2));
+}
+
 const client = new Client({
     authStrategy: new LocalAuth()
 });
 
-const ADMIN_NUMBER = '916200083509@c.us';
+const ADMIN_NUMBER = botSettings.adminNumber;
 let isConnected = false;
 
 // Server status tracking
@@ -233,39 +262,23 @@ client.on('ready', async () => {
     isConnected = true;
     io.emit('connectionStatus', { isConnected: true });
 
-    // Load start messages if file exists
-    let startMessages = [];
-    try {
-        if (fs.existsSync('start_messages.txt')) {
-            startMessages = fs.readFileSync('start_messages.txt', 'utf-8')
-                .split('\n')
-                .map(line => line.trim())
-                .filter(line => line.length > 0);
-        } else {
-            startMessages = [
-                "Hi Pratyush here, I got your number from Naukri.com.",
-                "I messaged you regarding a job opening in Shubham Housing Finance for the profile of Relationship Manager / Sales Manager in Home Loan, LAP and Mortgage.",
-                "Are you interested in Kota Location?"
-            ];
-        }
+    // Load start messages from settings
+    let startMessages = botSettings.initialMessages;
 
-        // Check if numbers.txt exists
-        if (fs.existsSync('numbers.txt')) {
-            const numbers = fs.readFileSync('numbers.txt', 'utf-8')
-                .split('\n')
-                .map(n => n.trim())
-                .filter(n => n.length > 0);
+    // Check if numbers.txt exists
+    if (fs.existsSync('numbers.txt')) {
+        const numbers = fs.readFileSync('numbers.txt', 'utf-8')
+            .split('\n')
+            .map(n => n.trim())
+            .filter(n => n.length > 0);
 
-            for (const number of numbers) {
-                const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
-                for (const msg of startMessages) {
-                    await client.sendMessage(chatId, msg);
-                    await new Promise(r => setTimeout(r, 1000));
-                }
+        for (const number of numbers) {
+            const chatId = number.includes('@c.us') ? number : `${number}@c.us`;
+            for (const msg of startMessages) {
+                await client.sendMessage(chatId, msg);
+                await new Promise(r => setTimeout(r, botSettings.messageDelay));
             }
         }
-    } catch (err) {
-        console.error('Error sending initial messages:', err);
     }
 });
 
@@ -321,7 +334,174 @@ app.get('/active-chats', (req, res) => {
     }
 });
 
-// Listen for /notify to send admin messages from Python
+// Get conversation logs for a specific number
+app.get('/conversation/:phoneNumber', (req, res) => {
+    const { phoneNumber } = req.params;
+    const chatId = phoneNumber.includes('@c.us') ? phoneNumber : `${phoneNumber}@c.us`;
+    const logPath = path.join(CHATLOG_DIR, `${chatId}.txt`);
+    
+    try {
+        if (fs.existsSync(logPath)) {
+            const logs = fs.readFileSync(logPath, 'utf-8')
+                .split('\n')
+                .filter(line => line.trim().length > 0)
+                .map(line => {
+                    // Parse log line format: timestamp - step: message
+                    const timestampEnd = line.indexOf(' - ');
+                    if (timestampEnd > 0) {
+                        const timestamp = line.substring(0, timestampEnd);
+                        const remainder = line.substring(timestampEnd + 3);
+                        
+                        const stepEnd = remainder.indexOf(': ');
+                        if (stepEnd > 0) {
+                            const step = remainder.substring(0, stepEnd);
+                            const message = remainder.substring(stepEnd + 2);
+                            
+                            return {
+                                timestamp,
+                                step,
+                                message,
+                                role: 'user'
+                            };
+                        }
+                    }
+                    return null;
+                })
+                .filter(entry => entry !== null);
+            
+            // Get conversation flow to recreate bot messages
+            const df = JSON.parse(fs.readFileSync('flow.json', 'utf-8'));
+            const flow = df.map(q => ({
+                step: q.step,
+                ask: q.ask
+            }));
+            
+            // Reconstruct the conversation with bot messages
+            const conversation = [];
+            for (let i = 0; i < logs.length; i++) {
+                const log = logs[i];
+                const stepIndex = flow.findIndex(f => f.step === log.step);
+                
+                if (stepIndex >= 0) {
+                    // Add bot message before user response
+                    conversation.push({
+                        role: 'bot',
+                        message: flow[stepIndex].ask,
+                        timestamp: new Date(new Date(log.timestamp).getTime() - 30000).toISOString()
+                    });
+                    
+                    // Add user response
+                    conversation.push({
+                        role: 'user',
+                        message: log.message,
+                        timestamp: log.timestamp
+                    });
+                }
+            }
+            
+            res.json({ 
+                phoneNumber: phoneNumber,
+                flow: conversation.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+            });
+        } else {
+            res.status(404).json({ error: 'Conversation not found' });
+        }
+    } catch (error) {
+        console.error(`Error reading conversation logs for ${phoneNumber}:`, error);
+        res.status(500).json({ error: 'Failed to retrieve conversation' });
+    }
+});
+
+// Get all conversations
+app.get('/conversations', (req, res) => {
+    try {
+        const CHATLOG_DIR = 'chatlogs';
+        if (!fs.existsSync(CHATLOG_DIR)) {
+            return res.json([]);
+        }
+        
+        const files = fs.readdirSync(CHATLOG_DIR);
+        const conversations = files
+            .filter(file => file.endsWith('.txt'))
+            .map(file => {
+                const phoneNumber = file.replace('.txt', '');
+                try {
+                    const content = fs.readFileSync(path.join(CHATLOG_DIR, file), 'utf-8');
+                    const lines = content.split('\n').filter(line => line.trim().length > 0);
+                    const lastLine = lines[lines.length - 1] || '';
+                    
+                    // Parse last line to get timestamp and message
+                    const timestampEnd = lastLine.indexOf(' - ');
+                    let lastMessage = '';
+                    let timestamp = new Date().toISOString();
+                    
+                    if (timestampEnd > 0) {
+                        timestamp = lastLine.substring(0, timestampEnd);
+                        const remainder = lastLine.substring(timestampEnd + 3);
+                        
+                        const messageStart = remainder.indexOf(': ');
+                        if (messageStart > 0) {
+                            lastMessage = remainder.substring(messageStart + 2);
+                        }
+                    }
+                    
+                    return {
+                        id: phoneNumber,
+                        phoneNumber: phoneNumber.split('@')[0],
+                        lastMessage,
+                        timestamp,
+                        status: 'active'
+                    };
+                } catch (error) {
+                    console.error(`Error reading file ${file}:`, error);
+                    return null;
+                }
+            })
+            .filter(conv => conv !== null)
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+        res.json(conversations);
+    } catch (error) {
+        console.error('Error reading conversations:', error);
+        res.json([]);
+    }
+});
+
+// Get and update bot settings
+app.get('/settings', (req, res) => {
+    res.json(botSettings);
+});
+
+app.post('/settings', (req, res) => {
+    try {
+        const newSettings = req.body;
+        botSettings = { ...botSettings, ...newSettings };
+        
+        // Update ADMIN_NUMBER if it changed
+        if (newSettings.adminNumber) {
+            ADMIN_NUMBER = newSettings.adminNumber;
+        }
+        
+        // Save settings to file
+        fs.writeFileSync('bot_settings.json', JSON.stringify(botSettings, null, 2));
+        
+        // Update Python server qualification criteria if it's running
+        if (serverStatus.pythonServer) {
+            axios.post('http://localhost:5000/update-criteria', {
+                criteria: botSettings.qualification
+            }).catch(err => {
+                console.error('Error updating Python qualification criteria:', err.message);
+            });
+        }
+        
+        res.json({ success: true, settings: botSettings });
+    } catch (error) {
+        console.error('Error updating settings:', error);
+        res.status(500).json({ error: 'Failed to update settings' });
+    }
+});
+
+// Get and notify admin
 app.post('/notify', async (req, res) => {
     const { message } = req.body;
     try {

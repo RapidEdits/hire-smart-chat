@@ -11,6 +11,7 @@ STATE_FILE = 'state.json'
 CHATLOG_DIR = 'chatlogs'
 DATA_FILE = 'data.csv'
 FAQ_FILE = 'faq.csv'
+FLOW_FILE = 'flow.json'
 ADMIN_WA_ID = '919987257230@c.us'
 
 if not os.path.exists(CHATLOG_DIR):
@@ -26,16 +27,21 @@ flow = df.to_dict(orient='records')
 step_order = [q['step'] for q in flow]
 step_map = {q['step']: q for q in flow}
 
+# Save flow to JSON for server.js to use
+with open(FLOW_FILE, 'w') as f:
+    json.dump(flow, f, indent=2)
+
 # Load FAQs from CSV
 faq_df = pd.read_csv(FAQ_FILE) if os.path.exists(FAQ_FILE) else pd.DataFrame(columns=['key', 'response'])
 FAQ_RESPONSES = dict(zip(faq_df['key'], faq_df['response']))
 
-# Qualification criteria
+# Qualification criteria - will be updated from server.js
 QUALIFICATION_CRITERIA = {
-    'min_experience': 2,  # Minimum years of experience
-    'min_ctc': 1,         # Minimum CTC in LPA
-    'max_ctc': 6,         # Maximum CTC in LPA
-    'notice_period_max': 60  # Maximum notice period in days
+    'min_experience': 2,        # Minimum years of experience
+    'min_ctc': 1,               # Minimum CTC in LPA
+    'max_ctc': 6,               # Maximum CTC in LPA
+    'notice_period_max': 60,    # Maximum notice period in days
+    'min_incentive': 5000       # Minimum incentive amount
 }
 
 def load_state():
@@ -85,11 +91,16 @@ def is_qualified(answers):
             # Default to days if no unit specified
             notice = float(''.join(c for c in notice_str if c.isdigit() or c == '.') or '0')
             
+        # Extract incentive if available
+        incentive_str = answers.get('incentive', '0')
+        incentive = float(''.join(c for c in incentive_str if c.isdigit() or c == '.') or '0')
+            
         # Check if candidate meets all criteria
         return (experience >= QUALIFICATION_CRITERIA['min_experience'] and 
                 ctc >= QUALIFICATION_CRITERIA['min_ctc'] and 
                 ctc <= QUALIFICATION_CRITERIA['max_ctc'] and 
-                notice <= QUALIFICATION_CRITERIA['notice_period_max'])
+                notice <= QUALIFICATION_CRITERIA['notice_period_max'] and
+                (incentive >= QUALIFICATION_CRITERIA['min_incentive'] if 'incentive' in answers else True))
     except Exception as e:
         print(f"Error in qualification assessment: {e}")
         return False
@@ -97,6 +108,30 @@ def is_qualified(answers):
 @app.route('/ping', methods=['GET'])
 def ping():
     return "pong", 200
+
+@app.route('/update-criteria', methods=['POST'])
+def update_criteria():
+    """Update qualification criteria from Node.js server"""
+    try:
+        data = request.json
+        if 'criteria' in data:
+            criteria = data['criteria']
+            
+            # Update qualification criteria
+            if 'experienceThreshold' in criteria:
+                QUALIFICATION_CRITERIA['min_experience'] = criteria['experienceThreshold']
+            
+            if 'ctcThreshold' in criteria:
+                QUALIFICATION_CRITERIA['min_ctc'] = criteria['ctcThreshold']
+            
+            if 'incentiveThreshold' in criteria:
+                QUALIFICATION_CRITERIA['min_incentive'] = criteria['incentiveThreshold']
+                
+            return jsonify({"success": True, "criteria": QUALIFICATION_CRITERIA})
+    except Exception as e:
+        print(f"Error updating criteria: {e}")
+        
+    return jsonify({"success": False, "error": "Failed to update criteria"})
 
 @app.route('/ask', methods=['POST'])
 def ask():
