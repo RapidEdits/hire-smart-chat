@@ -1,4 +1,3 @@
-
 import { io, Socket } from 'socket.io-client';
 
 // Detect if we're in a preview environment
@@ -18,6 +17,7 @@ class WhatsAppService {
   private maxConnectionAttempts: number = 3;
   private isPreviewMode: boolean = isPreviewEnvironment;
   private serverStartTimeout: number | null = null;
+  private hasEmittedPreviewError: boolean = false;
 
   constructor() {
     this.listeners = new Map([
@@ -32,15 +32,19 @@ class WhatsAppService {
   connect() {
     if (this.socket && this.socket.connected) return;
     
-    // If in preview environment, emit fake server status
-    if (this.isPreviewMode) {
+    // If in preview environment, emit fake server status only once
+    if (this.isPreviewMode && !this.hasEmittedPreviewError) {
       console.log('Running in preview mode - server connections simulated');
+      this.hasEmittedPreviewError = true;
       setTimeout(() => {
         this.notifyListeners('error', { 
           message: 'Cannot connect to local servers in preview mode. This app requires a WhatsApp server running locally on your machine.'
         });
         this.notifyListeners('serverStatus', { nodeServer: false, pythonServer: false });
       }, 1000);
+      return;
+    } else if (this.isPreviewMode) {
+      // If we've already emitted the error, don't do it again
       return;
     }
     
@@ -62,10 +66,12 @@ class WhatsAppService {
         console.error('Socket connection error:', error);
         this.connectionAttempts++;
         
-        // Notify listeners about the connection error
-        this.notifyListeners('error', { 
-          message: 'Cannot connect to WhatsApp server. Please ensure the server is running.'
-        });
+        // Notify listeners about the connection error only on first attempt
+        if (this.connectionAttempts === 1) {
+          this.notifyListeners('error', { 
+            message: 'Cannot connect to WhatsApp server. Please ensure the server is running.'
+          });
+        }
         
         if (this.connectionAttempts >= this.maxConnectionAttempts) {
           console.error('Max reconnection attempts reached, giving up');
@@ -112,12 +118,15 @@ class WhatsAppService {
 
   initialize() {
     if (this.isPreviewMode) {
-      console.log('Running in preview mode - WhatsApp initialization simulated');
-      setTimeout(() => {
-        this.notifyListeners('error', { 
-          message: 'Cannot initialize WhatsApp in preview mode. This app requires a local WhatsApp server.'
-        });
-      }, 1000);
+      if (!this.hasEmittedPreviewError) {
+        console.log('Running in preview mode - WhatsApp initialization simulated');
+        this.hasEmittedPreviewError = true;
+        setTimeout(() => {
+          this.notifyListeners('error', { 
+            message: 'Cannot initialize WhatsApp in preview mode. This app requires a local WhatsApp server.'
+          });
+        }, 1000);
+      }
       return;
     }
     
@@ -135,13 +144,18 @@ class WhatsAppService {
   startServers() {
     return new Promise<{nodeServer: boolean, pythonServer: boolean}>((resolve, reject) => {
       if (this.isPreviewMode) {
-        console.log('Running in preview mode - server startup simulated');
-        setTimeout(() => {
-          this.notifyListeners('error', { 
-            message: 'Cannot start servers in preview mode. Please run this application locally.'
-          });
-          reject(new Error('Cannot start servers in preview environment'));
-        }, 1500);
+        if (!this.hasEmittedPreviewError) {
+          console.log('Running in preview mode - server startup simulated');
+          this.hasEmittedPreviewError = true;
+          setTimeout(() => {
+            this.notifyListeners('error', { 
+              message: 'Cannot start servers in preview mode. Please run this application locally.'
+            });
+            reject(new Error('Cannot start servers in preview environment'));
+          }, 1500);
+        } else {
+          reject(new Error('Already attempted to start servers in preview mode'));
+        }
         return;
       }
       

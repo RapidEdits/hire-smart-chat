@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -24,6 +23,7 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPreviewMode] = useState(whatsAppService.isInPreviewMode());
   const [startServerClickCount, setStartServerClickCount] = useState(0);
+  const [showedErrorToast, setShowedErrorToast] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -83,6 +83,7 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
           title: "Servers Started",
           description: "WhatsApp bot servers are now running."
         });
+        setShowedErrorToast(false); // Reset error toast flag when servers are running
         
         if (startAttempted) {
           setTimeout(() => {
@@ -106,11 +107,15 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       setErrorMessage(error.message);
       setStartingServers(false);
       
-      toast({
-        title: "Connection Error",
-        description: error.message,
-        variant: "destructive"
-      });
+      // Only show toast if we haven't shown one already
+      if (!showedErrorToast && !isPreviewMode) {
+        setShowedErrorToast(true);
+        toast({
+          title: "Connection Error",
+          description: error.message,
+          variant: "destructive"
+        });
+      }
     });
 
     // Connect to WebSocket server (but don't crash if it fails)
@@ -124,12 +129,13 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       serverStatusUnsubscribe();
       errorUnsubscribe();
     };
-  }, [onConnect, toast, startAttempted]);
+  }, [onConnect, toast, startAttempted, showedErrorToast, isPreviewMode]);
 
   const startServers = async () => {
     setStartingServers(true);
     setStartAttempted(true);
     setErrorMessage(null);
+    setShowedErrorToast(false); // Reset error toast flag when attempting to start servers
     setStartServerClickCount(prev => prev + 1);
     
     // Provide specific guidance after multiple attempts
@@ -177,11 +183,14 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
         setErrorMessage("Failed to start the servers. Please run 'startBot.bat' file manually from your project folder.");
       }
       
-      toast({
-        title: "Server Error",
-        description: "Could not start the servers automatically. Please run startBot.bat manually.",
-        variant: "destructive"
-      });
+      if (!showedErrorToast) {
+        setShowedErrorToast(true);
+        toast({
+          title: "Server Error",
+          description: "Could not start the servers automatically. Please run startBot.bat manually.",
+          variant: "destructive"
+        });
+      }
     }
   };
 
