@@ -136,16 +136,34 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
     if (startServerClickCount >= 2) {
       toast({
         title: "Troubleshooting Tip",
-        description: "If server won't start, ensure 'node server.js' is running in a terminal before clicking the button."
+        description: "If server won't start, try running the 'startBot.bat' file directly from your project folder."
       });
     }
     
     try {
       console.log("Starting WhatsApp servers...");
-      // Start the server
-      await whatsAppService.startServers();
       
-      // We don't need to set server status here as it will come through the socket
+      if (isPreviewMode) {
+        // In preview mode, just simulate the process
+        await whatsAppService.startServers();
+      } else {
+        // In local mode, try to launch the batch file
+        try {
+          // Try to launch the batch file - this will work when running locally
+          const startProcess = window.open('file:///' + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')) + '/startBot.bat');
+          
+          if (startProcess) {
+            setTimeout(() => {
+              startProcess.close();
+            }, 1000);
+          }
+        } catch (error) {
+          console.error("Error launching batch file:", error);
+          // Fallback to the old method
+          await whatsAppService.startServers();
+        }
+      }
+      
       toast({
         title: "Starting Servers",
         description: "Attempting to start WhatsApp bot servers..."
@@ -156,12 +174,12 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       setStartingServers(false);
       
       if (!errorMessage) {
-        setErrorMessage("Failed to start the servers. Please ensure Node.js server is running with 'node server.js'.");
+        setErrorMessage("Failed to start the servers. Please run 'startBot.bat' file manually from your project folder.");
       }
       
       toast({
         title: "Server Error",
-        description: "Could not start the servers. Please check the Node.js server is running.",
+        description: "Could not start the servers automatically. Please run startBot.bat manually.",
         variant: "destructive"
       });
     }

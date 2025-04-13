@@ -1,4 +1,3 @@
-
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import express from 'express';
@@ -174,6 +173,51 @@ const startPythonServer = async () => {
     serverStatus.pythonServer = await checkPythonServer();
     console.log(`Initial Python server status: ${serverStatus.pythonServer ? 'running' : 'not running'}`);
 })();
+
+// Create candidates.json if it doesn't exist
+if (!fs.existsSync('candidates.json')) {
+  fs.writeFileSync('candidates.json', JSON.stringify([], null, 2));
+}
+
+// Get candidates list
+app.get('/candidates', (req, res) => {
+  try {
+    if (fs.existsSync('candidates.json')) {
+      const candidates = JSON.parse(fs.readFileSync('candidates.json', 'utf-8'));
+      res.json(candidates);
+    } else {
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('Error reading candidates:', error);
+    res.json([]);
+  }
+});
+
+// Get conversations endpoint
+app.get('/conversations', (req, res) => {
+  try {
+    if (fs.existsSync('state.json')) {
+      const state = JSON.parse(fs.readFileSync('state.json', 'utf-8'));
+      const conversations = Object.keys(state).map(id => {
+        const user = state[id];
+        return {
+          id,
+          phoneNumber: id.split('@')[0],
+          lastMessage: user.answers ? Object.values(user.answers).pop() || "Started conversation" : "Started conversation",
+          timestamp: new Date().toISOString(),
+          status: "active"
+        };
+      });
+      res.json(conversations);
+    } else {
+      res.json([]);
+    }
+  } catch (error) {
+    console.error('Error reading conversations:', error);
+    res.json([]);
+  }
+});
 
 // Handle socket connections
 io.on('connection', (socket) => {

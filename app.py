@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 import os, json
 from fuzzywuzzy import fuzz
@@ -318,18 +317,22 @@ def ask():
         admin_message = f"{qualification_status}\nInfo from {sender}:\n{final_info}"
 
         try:
-            # Save candidate to candidates.json if file exists
+            # Save candidate to candidates.json
             candidates_file = 'candidates.json'
             candidates = []
             
             if os.path.exists(candidates_file):
                 with open(candidates_file, 'r') as f:
-                    candidates = json.load(f)
-            
+                    try:
+                        candidates = json.load(f)
+                    except json.JSONDecodeError:
+                        # If file exists but is corrupted, start with empty list
+                        candidates = []
+        
             # Create candidate record
             candidate = {
                 'id': len(candidates) + 1,
-                'name': answers.get('company', 'Unknown'),  # We don't collect name, use company as identifier
+                'name': answers.get('name', answers.get('company', 'Unknown')),  # Use name if available, otherwise company
                 'phone': sender.split('@')[0],
                 'company': answers.get('company', 'Unknown'),
                 'experience': answers.get('experience', 'Unknown'),
@@ -338,23 +341,35 @@ def ask():
                 'notice': answers.get('notice', 'Unknown'),
                 'qualified': qualified,
                 'date_added': datetime.now().isoformat(),
-                'interview_scheduled': qualified  # Auto-schedule interview for qualified candidates
+                'interview_scheduled': False  # Default to False, let the user schedule manually
             }
             
-            candidates.append(candidate)
+            # Check if this candidate already exists (by phone number)
+            existing_index = next((i for i, c in enumerate(candidates) if c.get('phone') == candidate['phone']), None)
             
+            if existing_index is not None:
+                # Update existing candidate
+                candidates[existing_index].update(candidate)
+            else:
+                # Add new candidate
+                candidates.append(candidate)
+        
             # Save updated candidates list
             with open(candidates_file, 'w') as f:
                 json.dump(candidates, f, indent=2)
-            
+        
             # Notify admin
-            requests.post("http://localhost:3000/notify", json={
-                "to": ADMIN_WA_ID,
-                "message": admin_message
-            })
+            try:
+                requests.post("http://localhost:3000/notify", json={
+                    "to": ADMIN_WA_ID,
+                    "message": admin_message
+                })
+            except Exception as e:
+                print(f"[ERROR] Failed to notify admin: {e}")
+            
         except Exception as e:
             print(f"[ERROR] Failed to process candidate: {e}")
-
+        
         reply = "__COMPLETE__"
         state.pop(sender, None)
         save_state(state)
