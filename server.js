@@ -382,6 +382,37 @@ app.get('/server-status', async (req, res) => {
     res.json(serverStatus);
 });
 
+// Add new endpoint to handle candidate storage
+app.post('/store-candidate', async (req, res) => {
+  const { phone, answers } = req.body;
+  
+  try {
+    const { data, error } = await supabase.from('candidates').upsert({
+      phone: phone.split('@')[0],
+      name: answers.company || 'Unknown',
+      experience: answers.experience,
+      ctc: answers.ctc,
+      notice_period: answers.notice,
+      qualification: answers.qualified === 'Yes' ? 'qualified' : 'not_qualified',
+      status: 'new',
+      created_at: new Date().toISOString(),
+    }, {
+      onConflict: 'phone'
+    });
+
+    if (error) {
+      console.error('Error storing candidate:', error);
+      res.status(500).json({ error: error.message });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('Error in /store-candidate:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 server.listen(3000, () => {
     console.log('🌐 Express server running at http://localhost:3000');
 });
