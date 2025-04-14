@@ -165,13 +165,13 @@ class WhatsAppService {
       }
       
       if (this.socket) {
-        console.log('Sending startServers command to server with batch file');
+        console.log('Sending startServers command to server');
         
         // Set a timeout in case the server doesn't respond
         this.serverStartTimeout = window.setTimeout(() => {
           console.error('Server start timeout');
           this.notifyListeners('error', { 
-            message: 'Server start timed out. Please check if the server application is installed correctly and the batch file is executable.'
+            message: 'Server start timed out. Please check if Python is installed correctly.'
           });
           reject(new Error('Server start timeout'));
         }, 20000); // 20 seconds timeout
@@ -185,7 +185,6 @@ class WhatsAppService {
           resolve(status);
         };
         
-        // Error handler in case of issues
         const errorHandler = (error: { message: string }) => {
           console.error('Error starting servers:', error.message);
           if (this.serverStartTimeout) {
@@ -193,16 +192,12 @@ class WhatsAppService {
             this.serverStartTimeout = null;
           }
           this.off('error', errorHandler);
-          // Don't reject immediately, let the timeout handle it
-          // This prevents multiple error notifications
         };
         
-        // Listen for status update
         this.on('serverStatus', statusHandler);
         this.on('error', errorHandler);
         
-        // Send start command with batch file option
-        this.socket.emit('startServers', { useBatchFile: true });
+        this.socket.emit('startServers');
       } else {
         console.error('Socket not connected, cannot start servers');
         reject(new Error('Socket not connected'));

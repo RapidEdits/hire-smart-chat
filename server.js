@@ -97,39 +97,24 @@ const startPythonServer = async () => {
         return true;
     }
     
-    if (pythonStartAttempts >= MAX_PYTHON_START_ATTEMPTS) {
-        console.log('Maximum Python start attempts reached, giving up');
-        return false;
-    }
-    
-    pythonStartAttempts++;
-    console.log(`Starting Python server (attempt ${pythonStartAttempts})...`);
-    
     try {
-        // Find the Python executable
+        console.log('Starting Python server...');
         const pythonExecutable = getPythonExecutable();
-        
-        // Get the absolute path to app.py
         const appPath = path.resolve(process.cwd(), 'app.py');
-        console.log(`Starting Python with ${pythonExecutable} ${appPath}`);
         
-        // Start the Python process
         pythonProcess = spawn(pythonExecutable, [appPath], {
-            stdio: 'pipe', // Capture stdout and stderr
-            shell: true // Use shell to resolve path issues
+            stdio: 'pipe',
+            shell: true
         });
         
-        // Log stdout
         pythonProcess.stdout.on('data', (data) => {
             console.log(`Python server: ${data}`);
         });
         
-        // Log stderr
         pythonProcess.stderr.on('data', (data) => {
             console.error(`Python server error: ${data}`);
         });
         
-        // Handle process exit
         pythonProcess.on('close', (code) => {
             console.log(`Python server process exited with code ${code}`);
             serverStatus.pythonServer = false;
@@ -137,31 +122,26 @@ const startPythonServer = async () => {
             pythonProcess = null;
         });
         
-        // Wait for the server to start
-        console.log('Waiting for Python server to start...');
+        // Wait for server to start
         let attempts = 0;
-        let isServerRunning = false;
-        
-        while (attempts < 10 && !isServerRunning) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-            attempts++;
+        while (attempts < 10) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
             try {
-                isServerRunning = await checkPythonServer();
-                if (isServerRunning) {
-                    console.log(`Python server started after ${attempts} seconds`);
-                    break;
+                const running = await checkPythonServer();
+                if (running) {
+                    serverStatus.pythonServer = true;
+                    io.emit('serverStatus', serverStatus);
+                    return true;
                 }
             } catch (err) {
-                console.log(`Still waiting for Python server (${attempts}/10)...`);
+                console.log(`Waiting for Python server (attempt ${attempts + 1}/10)...`);
             }
+            attempts++;
         }
         
-        serverStatus.pythonServer = isServerRunning;
-        io.emit('serverStatus', serverStatus);
-        
-        return isServerRunning;
+        throw new Error('Python server failed to start');
     } catch (error) {
-        console.error('Error starting Python server:', error);
+        console.error('Failed to start Python server:', error);
         serverStatus.pythonServer = false;
         io.emit('serverStatus', serverStatus);
         return false;
@@ -240,17 +220,23 @@ io.on('connection', (socket) => {
     });
     
     // Handle client request to start servers
-    socket.on('startServers', async (options = {}) => {
-        console.log('Request to start servers received', options);
+    socket.on('startServers', async () => {
+        console.log('Request to start servers received');
         
-        // Start Python server if not running
-        if (!serverStatus.pythonServer) {
-            const pythonStarted = await startPythonServer();
-            console.log(`Python server start result: ${pythonStarted ? 'success' : 'failure'}`);
+        try {
+            // Start Python server if not running
+            if (!serverStatus.pythonServer) {
+                const pythonStarted = await startPythonServer();
+                if (!pythonStarted) {
+                    throw new Error('Failed to start Python server');
+                }
+            }
+            
+            socket.emit('serverStatus', serverStatus);
+        } catch (error) {
+            console.error('Error starting servers:', error);
+            socket.emit('error', { message: 'Failed to start servers. Please check if Python is installed and try again.' });
         }
-        
-        // Send current server status
-        socket.emit('serverStatus', serverStatus);
     });
     
     socket.on('disconnect', () => {

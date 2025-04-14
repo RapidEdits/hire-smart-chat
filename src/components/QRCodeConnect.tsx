@@ -135,40 +135,11 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
     setStartingServers(true);
     setStartAttempted(true);
     setErrorMessage(null);
-    setShowedErrorToast(false); // Reset error toast flag when attempting to start servers
-    setStartServerClickCount(prev => prev + 1);
-    
-    // Provide specific guidance after multiple attempts
-    if (startServerClickCount >= 2) {
-      toast({
-        title: "Troubleshooting Tip",
-        description: "If server won't start, try running the 'startBot.bat' file directly from your project folder."
-      });
-    }
+    setShowedErrorToast(false);
     
     try {
       console.log("Starting WhatsApp servers...");
-      
-      if (isPreviewMode) {
-        // In preview mode, just simulate the process
-        await whatsAppService.startServers();
-      } else {
-        // In local mode, try to launch the batch file
-        try {
-          // Try to launch the batch file - this will work when running locally
-          const startProcess = window.open('file:///' + window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/')) + '/startBot.bat');
-          
-          if (startProcess) {
-            setTimeout(() => {
-              startProcess.close();
-            }, 1000);
-          }
-        } catch (error) {
-          console.error("Error launching batch file:", error);
-          // Fallback to the old method
-          await whatsAppService.startServers();
-        }
-      }
+      await whatsAppService.startServers();
       
       toast({
         title: "Starting Servers",
@@ -180,14 +151,14 @@ export function QRCodeConnect({ onConnect }: QRCodeConnectProps) {
       setStartingServers(false);
       
       if (!errorMessage) {
-        setErrorMessage("Failed to start the servers. Please run 'startBot.bat' file manually from your project folder.");
+        setErrorMessage("Failed to start the servers. Please ensure Python is installed and try again.");
       }
       
       if (!showedErrorToast) {
         setShowedErrorToast(true);
         toast({
           title: "Server Error",
-          description: "Could not start the servers automatically. Please run startBot.bat manually.",
+          description: "Could not start the servers. Please check if Python is installed correctly.",
           variant: "destructive"
         });
       }
