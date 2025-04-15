@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { FileDown, FileUp, UserPlus } from "lucide-react";
 import { Badge } from "./ui/badge";
-import axios from "axios";
 import { useToast } from "./ui/use-toast";
+import { getQualifiedCandidates, getCandidateStats } from "@/services/candidateService";
 
 type Candidate = {
   id: number;
@@ -25,54 +25,34 @@ type Candidate = {
 export function CandidatesList() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({ qualified: 0, total: 0 });
   const { toast } = useToast();
 
   useEffect(() => {
-    const fetchCandidates = async () => {
+    const fetchData = async () => {
       setLoading(true);
       try {
-        const response = await axios.get('http://localhost:5000/candidates');
-        setCandidates(response.data || []);
-      } catch (error) {
-        console.error('Error fetching candidates:', error);
+        const [candidatesData, statsData] = await Promise.all([
+          getQualifiedCandidates(),
+          getCandidateStats()
+        ]);
         
-        // If in development/preview mode, use mock data
-        if (import.meta.env.DEV || window.location.hostname.includes('lovableproject.com')) {
-          console.log('Using mock candidate data');
-          setCandidates([
-            {
-              id: 1,
-              name: "John Doe",
-              phone: "916200083509",
-              company: "HDFC Bank",
-              experience: "3 years",
-              ctc: "8 LPA",
-              product: "Home Loan",
-              notice: "30 days",
-              qualified: true,
-              interview_scheduled: true
-            },
-            {
-              id: 2,
-              name: "Jane Smith",
-              phone: "919987257230",
-              company: "ICICI Bank",
-              experience: "2 years",
-              ctc: "6 LPA",
-              product: "Personal Loan",
-              notice: "45 days",
-              qualified: false,
-              interview_scheduled: false
-            }
-          ]);
-        }
+        setCandidates(candidatesData || []);
+        setStats(statsData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to fetch candidates",
+          variant: "destructive"
+        });
       } finally {
         setLoading(false);
       }
     };
     
-    fetchCandidates();
-  }, []);
+    fetchData();
+  }, [toast]);
 
   const handleExport = () => {
     if (candidates.length === 0) return;
@@ -125,9 +105,36 @@ export function CandidatesList() {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Qualified Candidates</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.qualified}</div>
+            <p className="text-xs text-muted-foreground">
+              out of {stats.total} total candidates
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Qualification Rate</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {stats.total > 0 ? Math.round((stats.qualified / stats.total) * 100) : 0}%
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Average qualification rate
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>Candidate Database</CardTitle>
+          <CardTitle>Qualified Candidates</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (

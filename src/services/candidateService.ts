@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 
 export type CandidateQualification = {
@@ -32,6 +31,47 @@ export const storeCandidate = async (phone: string, answers: Record<string, any>
     return data;
   } catch (err) {
     console.error('Error in storeCandidate:', err);
+    throw err;
+  }
+};
+
+export const getQualifiedCandidates = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('candidates')
+      .select('*')
+      .eq('qualification', 'qualified')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching qualified candidates:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Error in getQualifiedCandidates:', err);
+    throw err;
+  }
+};
+
+export const getCandidateStats = async () => {
+  try {
+    const { data: qualifiedCount } = await supabase
+      .from('candidates')
+      .select('*', { count: 'exact', head: true })
+      .eq('qualification', 'qualified');
+
+    const { data: totalCount } = await supabase
+      .from('candidates')
+      .select('*', { count: 'exact', head: true });
+
+    return {
+      qualified: qualifiedCount?.count || 0,
+      total: totalCount?.count || 0
+    };
+  } catch (err) {
+    console.error('Error in getCandidateStats:', err);
     throw err;
   }
 };
