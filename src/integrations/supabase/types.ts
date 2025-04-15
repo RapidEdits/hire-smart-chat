@@ -60,6 +60,42 @@ export type Database = {
         }
         Relationships: []
       }
+      job_profiles: {
+        Row: {
+          created_at: string | null
+          department: string | null
+          description: string
+          id: string
+          location: string | null
+          requirements: string[]
+          salary_range: Json | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          department?: string | null
+          description: string
+          id?: string
+          location?: string | null
+          requirements?: string[]
+          salary_range?: Json | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          department?: string | null
+          description?: string
+          id?: string
+          location?: string | null
+          requirements?: string[]
+          salary_range?: Json | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
