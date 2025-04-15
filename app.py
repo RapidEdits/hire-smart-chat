@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 import os, json
 from fuzzywuzzy import fuzz
@@ -14,6 +15,9 @@ DATA_FILE = 'data.csv'
 FAQ_FILE = 'faq.csv'
 FLOW_FILE = 'flow.json'
 ADMIN_WA_ID = '916200083509@c.us'
+
+# Supabase URL for calling the edge function
+SUPABASE_URL = "https://prhvwjzfpayezelqlmri.supabase.co"
 
 if not os.path.exists(CHATLOG_DIR):
     os.makedirs(CHATLOG_DIR)
@@ -183,6 +187,62 @@ def ask():
 
     state = load_state()
     user = state.get(sender, {"step": "interest", "answers": {}, "flags": {}})
+
+    # Store conversation history for AI context
+    conversation_history = user.get('conversation_history', [])
+    
+    # Check if we should use Mistral AI instead of rule-based responses
+    use_mistral = os.environ.get('USE_MISTRAL', 'false').lower() == 'true'
+    
+    if use_mistral:
+        try:
+            # Prepare flow and FAQ data
+            with open(DATA_FILE, 'r') as f:
+                flow_data = f.read()
+                
+            with open(FAQ_FILE, 'r') as f:
+                faq_data = f.read()
+            
+            # Add the user message to conversation history
+            conversation_history.append({"role": "user", "content": message})
+            
+            # Call Mistral edge function
+            response = requests.post(
+                f"{SUPABASE_URL}/functions/v1/mistral-chat",
+                json={
+                    "message": message,
+                    "sender": sender,
+                    "conversationHistory": conversation_history
+                }
+            )
+            
+            if response.status_code == 200:
+                mistral_reply = response.json().get('reply')
+                
+                # Add AI response to conversation history
+                conversation_history.append({"role": "assistant", "content": mistral_reply})
+                
+                # Limit conversation history to last 10 messages
+                if len(conversation_history) > 10:
+                    conversation_history = conversation_history[-10:]
+                
+                # Update user state
+                user['conversation_history'] = conversation_history
+                state[sender] = user
+                save_state(state)
+                
+                # Log the conversation
+                with open(f'{CHATLOG_DIR}/{sender}.txt', 'a', encoding='utf-8') as f:
+                    f.write(f"{datetime.now().isoformat()} - User: {message}\n")
+                    f.write(f"{datetime.now().isoformat()} - AI: {mistral_reply}\n")
+                
+                return jsonify({"reply": mistral_reply})
+            else:
+                print(f"Error from Mistral edge function: {response.text}")
+                # Fall back to rule-based approach
+        except Exception as e:
+            print(f"Error calling Mistral: {e}")
+            # Fall back to rule-based approach
 
     # 🔁 Global "not interested" check
     if any(kw in message.lower() for kw in ["no", "not interested", "nahi", "na", "nope", "not intrested"]):

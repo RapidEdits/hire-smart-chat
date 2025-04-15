@@ -5,6 +5,7 @@ import { WhatsAppBot } from "@/components/WhatsAppBot";
 import { BotSettings } from "@/components/BotSettings";
 import { ConversationFlow } from "@/components/ConversationFlow";
 import { NumbersUpload } from "@/components/NumbersUpload";
+import { MistralToggle } from "@/components/MistralToggle";
 
 const WhatsAppBotPage = () => {
   return (
@@ -14,11 +15,12 @@ const WhatsAppBotPage = () => {
         <h1 className="text-2xl font-bold mb-6">WhatsApp Bot Management</h1>
         
         <Tabs defaultValue="connect" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-5 mb-6">
             <TabsTrigger value="connect">Connect</TabsTrigger>
             <TabsTrigger value="numbers">Numbers</TabsTrigger>
             <TabsTrigger value="flow">Conversation Flow</TabsTrigger>
             <TabsTrigger value="settings">Bot Settings</TabsTrigger>
+            <TabsTrigger value="ai">AI Settings</TabsTrigger>
           </TabsList>
           
           <TabsContent value="connect">
@@ -35,6 +37,12 @@ const WhatsAppBotPage = () => {
           
           <TabsContent value="settings">
             <BotSettings />
+          </TabsContent>
+          
+          <TabsContent value="ai">
+            <div className="grid grid-cols-1 gap-6">
+              <MistralToggle />
+            </div>
           </TabsContent>
         </Tabs>
       </div>

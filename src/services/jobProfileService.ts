@@ -25,7 +25,18 @@ export const jobProfileService = {
       throw error;
     }
     
-    return data || [];
+    // Transform the data to ensure salary_range is properly typed
+    return (data || []).map(profile => ({
+      id: profile.id,
+      title: profile.title,
+      description: profile.description,
+      requirements: profile.requirements,
+      salary_range: typeof profile.salary_range === 'string' 
+        ? JSON.parse(profile.salary_range) 
+        : profile.salary_range,
+      location: profile.location,
+      department: profile.department
+    }));
   },
 
   async createProfile(profile: JobProfile): Promise<JobProfile> {
@@ -40,7 +51,18 @@ export const jobProfileService = {
       throw error;
     }
     
-    return data;
+    // Transform to ensure correct typing
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      requirements: data.requirements,
+      salary_range: typeof data.salary_range === 'string' 
+        ? JSON.parse(data.salary_range) 
+        : data.salary_range,
+      location: data.location,
+      department: data.department
+    };
   },
 
   async updateProfile(id: string, profile: Partial<JobProfile>): Promise<JobProfile> {
@@ -56,7 +78,18 @@ export const jobProfileService = {
       throw error;
     }
     
-    return data;
+    // Transform to ensure correct typing
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      requirements: data.requirements,
+      salary_range: typeof data.salary_range === 'string' 
+        ? JSON.parse(data.salary_range) 
+        : data.salary_range,
+      location: data.location,
+      department: data.department
+    };
   },
 
   async deleteProfile(id: string): Promise<void> {

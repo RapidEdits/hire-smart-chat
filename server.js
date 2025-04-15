@@ -35,6 +35,10 @@ const client = new Client({
 const ADMIN_NUMBER = '916200083509@c.us';
 let isConnected = false;
 
+// Set Mistral API key in environment for Python to access
+process.env.MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || "nKsx3Q2PS5NqHi90D2qumbVOBxjc7BrL";
+process.env.USE_MISTRAL = process.env.USE_MISTRAL || "false";
+
 // Server status tracking
 let serverStatus = {
     nodeServer: true,  // Since we're running this file, Node.js server is active
@@ -102,9 +106,17 @@ const startPythonServer = async () => {
         const pythonExecutable = getPythonExecutable();
         const appPath = path.resolve(process.cwd(), 'app.py');
         
+        // Set environment variables for Python process
+        const env = {
+            ...process.env,
+            MISTRAL_API_KEY: process.env.MISTRAL_API_KEY,
+            USE_MISTRAL: process.env.USE_MISTRAL
+        };
+        
         pythonProcess = spawn(pythonExecutable, [appPath], {
             stdio: 'pipe',
-            shell: true
+            shell: true,
+            env: env
         });
         
         pythonProcess.stdout.on('data', (data) => {
@@ -159,6 +171,34 @@ if (!fs.existsSync('candidates.json')) {
   fs.writeFileSync('candidates.json', JSON.stringify([], null, 2));
 }
 
+// Toggle Mistral AI usage
+app.post('/toggle-mistral', (req, res) => {
+  const { enabled } = req.body;
+  process.env.USE_MISTRAL = enabled ? "true" : "false";
+  
+  // Restart Python server with new settings
+  if (pythonProcess && pythonProcess.exitCode === null) {
+    pythonProcess.kill();
+    pythonProcess = null;
+  }
+  
+  startPythonServer().then(started => {
+    if (started) {
+      res.json({ success: true, mistralEnabled: enabled });
+    } else {
+      res.status(500).json({ success: false, error: "Failed to restart Python server" });
+    }
+  });
+});
+
+// Get Mistral AI status
+app.get('/mistral-status', (req, res) => {
+  res.json({ 
+    enabled: process.env.USE_MISTRAL === "true",
+    apiKeyConfigured: !!process.env.MISTRAL_API_KEY
+  });
+});
+
 // Get candidates list
 app.get('/candidates', (req, res) => {
   try {
@@ -209,6 +249,10 @@ io.on('connection', (socket) => {
     // Send current server and connection status
     socket.emit('serverStatus', serverStatus);
     socket.emit('connectionStatus', { isConnected });
+    socket.emit('mistralStatus', { 
+      enabled: process.env.USE_MISTRAL === "true",
+      apiKeyConfigured: !!process.env.MISTRAL_API_KEY
+    });
     
     // Handle client request to initialize
     socket.on('initialize', () => {
