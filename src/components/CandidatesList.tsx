@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -6,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { FileDown, FileUp, UserPlus } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { useToast } from "./ui/use-toast";
-import { getQualifiedCandidates, getCandidateStats } from "@/services/candidateService";
+import { getQualifiedCandidates, getCandidateStats, Candidate } from "@/services/candidateService";
 
 type Candidate = {
   id: number;
@@ -60,7 +59,7 @@ export function CandidatesList() {
     // Convert candidates to CSV
     const headers = "ID,Name,Phone,Company,Experience,CTC,Product,Notice Period,Qualified,Interview Scheduled,Date Added\n";
     const rows = candidates.map(candidate => 
-      `${candidate.id},"${candidate.name || candidate.company}",${candidate.phone},"${candidate.company}","${candidate.experience}","${candidate.ctc}","${candidate.product || ""}","${candidate.notice || ""}",${candidate.qualified},${candidate.interview_scheduled},"${candidate.date_added || ""}"`
+      `${candidate.id},"${candidate.name || candidate.company}",${candidate.phone},"${candidate.company || ""}","${candidate.experience || ""}","${candidate.ctc || ""}","${candidate.product || ""}","${candidate.notice || ""}",${candidate.qualified},${candidate.interview_scheduled || false},"${candidate.date_added || ""}"`
     ).join('\n');
     
     const csv = headers + rows;

@@ -431,26 +431,18 @@ app.post('/store-candidate', async (req, res) => {
   const { phone, answers } = req.body;
   
   try {
-    const { data, error } = await supabase.from('candidates').upsert({
+    const response = await axios.post('http://localhost:5000/store-candidate', {
       phone: phone.split('@')[0],
-      name: answers.company || 'Unknown',
-      experience: answers.experience,
-      ctc: answers.ctc,
-      notice_period: answers.notice,
-      qualification: answers.qualified === 'Yes' ? 'qualified' : 'not_qualified',
-      status: 'new',
-      created_at: new Date().toISOString(),
-    }, {
-      onConflict: 'phone'
+      answers: {
+        company: answers.company || 'Unknown',
+        experience: answers.experience,
+        ctc: answers.ctc,
+        notice: answers.notice,
+        qualified: answers.qualified === 'Yes' ? 'qualified' : 'not_qualified'
+      }
     });
 
-    if (error) {
-      console.error('Error storing candidate:', error);
-      res.status(500).json({ error: error.message });
-      return;
-    }
-
-    res.json({ success: true, data });
+    res.json(response.data);
   } catch (err) {
     console.error('Error in /store-candidate:', err);
     res.status(500).json({ error: err.message });
