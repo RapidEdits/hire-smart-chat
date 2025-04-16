@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -6,20 +7,6 @@ import { FileDown, FileUp, UserPlus } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { useToast } from "./ui/use-toast";
 import { getQualifiedCandidates, getCandidateStats, Candidate } from "@/services/candidateService";
-
-type Candidate = {
-  id: number;
-  name: string;
-  phone: string;
-  company: string;
-  experience: string;
-  ctc: string;
-  product?: string;
-  notice?: string;
-  qualified: boolean;
-  interview_scheduled: boolean;
-  date_added?: string;
-};
 
 export function CandidatesList() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -59,7 +46,7 @@ export function CandidatesList() {
     // Convert candidates to CSV
     const headers = "ID,Name,Phone,Company,Experience,CTC,Product,Notice Period,Qualified,Interview Scheduled,Date Added\n";
     const rows = candidates.map(candidate => 
-      `${candidate.id},"${candidate.name || candidate.company}",${candidate.phone},"${candidate.company || ""}","${candidate.experience || ""}","${candidate.ctc || ""}","${candidate.product || ""}","${candidate.notice || ""}",${candidate.qualified},${candidate.interview_scheduled || false},"${candidate.date_added || ""}"`
+      `${candidate.id},"${candidate.name || candidate.company || ""}",${candidate.phone},"${candidate.company || ""}","${candidate.experience || ""}","${candidate.ctc || ""}","${candidate.product || ""}","${candidate.notice || ""}",${candidate.qualified},${candidate.interview_scheduled || false},"${candidate.date_added || ""}"`
     ).join('\n');
     
     const csv = headers + rows;
@@ -157,7 +144,7 @@ export function CandidatesList() {
                 {candidates.length > 0 ? (
                   candidates.map((candidate) => (
                     <TableRow key={candidate.id}>
-                      <TableCell className="font-medium">{candidate.name || candidate.company}</TableCell>
+                      <TableCell className="font-medium">{candidate.name || candidate.company || ""}</TableCell>
                       <TableCell>{candidate.phone}</TableCell>
                       <TableCell>{candidate.experience}</TableCell>
                       <TableCell>{candidate.ctc}</TableCell>

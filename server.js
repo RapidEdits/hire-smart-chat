@@ -1,3 +1,4 @@
+
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import express from 'express';
@@ -426,26 +427,21 @@ app.get('/server-status', async (req, res) => {
     res.json(serverStatus);
 });
 
-// Add new endpoint to handle candidate storage
+// Add endpoint to handle candidate storage
 app.post('/store-candidate', async (req, res) => {
   const { phone, answers } = req.body;
   
   try {
+    // Forward the request to Python server
     const response = await axios.post('http://localhost:5000/store-candidate', {
       phone: phone.split('@')[0],
-      answers: {
-        company: answers.company || 'Unknown',
-        experience: answers.experience,
-        ctc: answers.ctc,
-        notice: answers.notice,
-        qualified: answers.qualified === 'Yes' ? 'qualified' : 'not_qualified'
-      }
+      answers: answers
     });
 
-    res.json(response.data);
+    return res.json(response.data);
   } catch (err) {
     console.error('Error in /store-candidate:', err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 

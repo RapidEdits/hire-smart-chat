@@ -179,6 +179,62 @@ def update_criteria():
         
     return jsonify({"success": False, "error": "Failed to update criteria"})
 
+@app.route('/store-candidate', methods=['POST'])
+def store_candidate():
+    """Store candidate data from server.js"""
+    try:
+        data = request.json
+        if not data or 'phone' not in data or 'answers' not in data:
+            return jsonify({"success": False, "error": "Missing required fields"}), 400
+            
+        phone = data['phone']
+        answers = data['answers']
+        
+        # Save to candidates.json for local backup
+        if os.path.exists('candidates.json'):
+            with open('candidates.json', 'r') as f:
+                candidates = json.load(f)
+        else:
+            candidates = []
+        
+        # Check if candidate with this phone number already exists
+        existing_candidate = next((c for c in candidates if c.get('phone') == phone.split('@')[0]), None)
+        
+        if existing_candidate:
+            # Update existing candidate
+            existing_candidate.update({
+                'name': answers.get('company', 'Unknown'),
+                'experience': answers.get('experience', 'Unknown'),
+                'ctc': answers.get('ctc', 'Unknown'),
+                'notice': answers.get('notice', 'Unknown'),
+                'product': answers.get('product', 'Unknown'),
+                'qualified': answers.get('qualified') == 'qualified',
+                'date_updated': datetime.now().isoformat()
+            })
+        else:
+            # Add new candidate
+            candidates.append({
+                'id': len(candidates) + 1,
+                'name': answers.get('company', 'Unknown'),
+                'phone': phone.split('@')[0],
+                'company': answers.get('company', 'Unknown'),
+                'experience': answers.get('experience', 'Unknown'),
+                'ctc': answers.get('ctc', 'Unknown'),
+                'product': answers.get('product', 'Unknown'),
+                'notice': answers.get('notice', 'Unknown'),
+                'qualified': answers.get('qualified') == 'qualified',
+                'date_added': datetime.now().isoformat()
+            })
+        
+        with open('candidates.json', 'w') as f:
+            json.dump(candidates, f, indent=2)
+        
+        return jsonify({"success": True, "message": "Candidate stored successfully"})
+            
+    except Exception as e:
+        print(f"Error in store_candidate: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/ask', methods=['POST'])
 def ask():
     data = request.json
