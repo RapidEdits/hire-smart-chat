@@ -1,4 +1,3 @@
-
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import express from 'express';
@@ -12,10 +11,18 @@ import qr from 'qrcode';
 import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 
 // Get current file directory (equivalent to __dirname in CommonJS)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Supabase client
+const SUPABASE_URL = "https://prhvwjzfpayezelqlmri.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InByaHZ3anpmcGF5ZXplbHFsbXJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQ2MTI0MTEsImV4cCI6MjA2MDE4ODQxMX0.XpRRcUAqFrT2lEMc-4NgQFm79Eox0Wl4pOxjqdYSph8";
+
+// Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 const app = express();
 app.use(cors());
@@ -427,27 +434,105 @@ app.get('/server-status', async (req, res) => {
     res.json(serverStatus);
 });
 
-// Add endpoint to handle candidate storage
+// Add endpoint to handle Supabase candidate storage
+app.post('/supabase-store', async (req, res) => {
+  try {
+    console.log('Storing candidate in Supabase:', req.body);
+    
+    const { data, error } = await supabase
+      .from('candidates')
+      .upsert(req.body, {
+        onConflict: 'phone'
+      });
+      
+    if (error) {
+      console.error('Error storing candidate in Supabase:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('Error in /supabase-store:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Update the existing /store-candidate endpoint
 app.post('/store-candidate', async (req, res) => {
   const { phone, answers } = req.body;
   
   try {
     // Forward the request to Python server
-    const response = await axios.post('http://localhost:5000/store-candidate', {
+    const pythonResponse = await axios.post('http://localhost:5000/store-candidate', {
       phone: phone.split('@')[0],
       answers: answers
     });
 
-    return res.json(response.data);
+    // If Python server handled it successfully, also try direct Supabase storage
+    if (pythonResponse.data.success) {
+      try {
+        // Prepare data for Supabase
+        const candidateData = {
+          phone: phone.split('@')[0],
+          name: answers.company || 'Unknown',
+          experience: answers.experience || null,
+          ctc: answers.ctc || null,
+          notice_period: answers.notice || null,
+          qualification: answers.qualified ? 'qualified' : 'not_qualified',
+          status: 'new'
+        };
+        
+        // Direct Supabase storage without going through Python
+        const { error } = await supabase
+          .from('candidates')
+          .upsert(candidateData, {
+            onConflict: 'phone'
+          });
+          
+        if (error) {
+          console.log('Supabase direct storage error:', error);
+        }
+      } catch (supabaseError) {
+        console.error('Error in direct Supabase storage:', supabaseError);
+      }
+    }
+
+    return res.json(pythonResponse.data);
   } catch (err) {
     console.error('Error in /store-candidate:', err);
-    return res.status(500).json({ error: err.message });
+    // If Python server is down, try to store directly in Supabase
+    try {
+      // Prepare data for Supabase
+      const candidateData = {
+        phone: phone.split('@')[0],
+        name: answers.company || 'Unknown',
+        experience: answers.experience || null,
+        ctc: answers.ctc || null,
+        notice_period: answers.notice || null,
+        qualification: answers.qualified ? 'qualified' : 'not_qualified',
+        status: 'new'
+      };
+      
+      // Direct Supabase storage
+      const { data, error } = await supabase
+        .from('candidates')
+        .upsert(candidateData, {
+          onConflict: 'phone'
+        });
+        
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+      
+      return res.json({ success: true, data });
+    } catch (supabaseError) {
+      return res.status(500).json({ error: err.message });
+    }
   }
-});
-
-server.listen(3000, () => {
-    console.log('🌐 Express server running at http://localhost:3000');
 });
 
 // Don't auto-initialize, let the frontend trigger it
 // client.initialize();
+server.listen(3000, () => {
+    console.log('🌐 Express server running at http://localhost:3000');
+});

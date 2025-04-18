@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 import os, json
 from fuzzywuzzy import fuzz
@@ -228,6 +227,36 @@ def store_candidate():
         
         with open('candidates.json', 'w') as f:
             json.dump(candidates, f, indent=2)
+        
+        # Now try to store in Supabase directly
+        try:
+            # Importing within the function to avoid global imports
+            import requests
+            
+            # Prepare data for Supabase
+            clean_phone = phone.split('@')[0]
+            
+            # Make a request to our server.js endpoint that calls Supabase
+            supabase_payload = {
+                "phone": clean_phone,
+                "name": answers.get('company', 'Unknown'), 
+                "experience": answers.get('experience'),
+                "ctc": answers.get('ctc'),
+                "notice_period": answers.get('notice'),
+                "qualification": 'qualified' if answers.get('qualified') == 'qualified' else 'not_qualified',
+                "status": 'new'
+            }
+            
+            response = requests.post(
+                "http://localhost:3000/supabase-store",
+                json=supabase_payload
+            )
+            
+            if response.status_code != 200:
+                print(f"Error storing in Supabase: {response.text}")
+        
+        except Exception as e:
+            print(f"Error storing candidate in Supabase: {e}")
         
         return jsonify({"success": True, "message": "Candidate stored successfully"})
             

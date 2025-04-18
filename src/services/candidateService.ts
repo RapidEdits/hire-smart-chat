@@ -27,24 +27,32 @@ export type Candidate = {
 
 export const storeCandidate = async (phone: string, answers: Record<string, any>) => {
   try {
-    const { data, error } = await supabase.from('candidates').upsert({
-      phone: phone.split('@')[0],
+    // Clean up phone number (remove '@c.us' if present)
+    const cleanPhone = phone.split('@')[0];
+    
+    // Prepare candidate data for Supabase
+    const candidateData = {
+      phone: cleanPhone,
       name: answers.company || 'Unknown', // Using company as name since that's what we have
-      experience: answers.experience,
-      ctc: answers.ctc,
-      notice_period: answers.notice,
+      experience: answers.experience || null,
+      ctc: answers.ctc || null,
+      notice_period: answers.notice || null,
       qualification: answers.qualified ? 'qualified' : 'not_qualified',
-      status: 'new',
-      created_at: new Date().toISOString(),
-    }, {
-      onConflict: 'phone'
-    });
-
+      status: 'new'
+    };
+    
+    // Store in Supabase
+    const { data, error } = await supabase
+      .from('candidates')
+      .upsert(candidateData, {
+        onConflict: 'phone'
+      });
+      
     if (error) {
-      console.error('Error storing candidate:', error);
+      console.error('Error storing candidate in Supabase:', error);
       throw error;
     }
-
+    
     return data;
   } catch (err) {
     console.error('Error in storeCandidate:', err);
